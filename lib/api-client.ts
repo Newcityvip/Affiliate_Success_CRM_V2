@@ -1,6 +1,9 @@
 export type Role = 'STAFF' | 'SUPERVISOR' | 'ADMIN' | 'SUPER_ADMIN';
 export type CurrentUser = { staffId: string; username: string; displayName: string; email: string; role: Role; team: string };
 export type LoginResponse = { token: string; expiresAt: string; user: CurrentUser };
+export type StaffRecord = CurrentUser & { status: 'ACTIVE'|'INACTIVE'|'SUSPENDED'; prospectTarget: number; maxManagedAffiliates: number; createdAt: string; updatedAt: string; lastLoginAt: string; passwordChangedAt: string };
+export type TeamRecord = { teamId:string; teamName:string; teamCode:string; status:'ACTIVE'|'INACTIVE'; defaultProspectTarget:number; defaultMaxManagedAffiliates:number; createdAt:string; updatedAt:string };
+export type BrandRecord = { brandId:string; brandName:string; brandCode:string; market:string; defaultLanguage:string; status:'ACTIVE'|'INACTIVE'; sortOrder:number; createdAt:string; updatedAt:string };
 
 export class ApiError extends Error { constructor(message: string, public code = 'API_ERROR') { super(message); } }
 type ApiEnvelope<T> = { ok: boolean; data?: T; error?: { code: string; message: string } };
@@ -27,8 +30,17 @@ class ApiClient {
   logout() { return this.call<void>('logout'); }
   validateSession() { return this.call<{ valid: boolean }>('validateSession'); }
   currentUser() { return this.call<CurrentUser>('currentUser'); }
-  listStaff() { return this.call<unknown[]>('listStaff'); }
-  listBrands() { return this.call<unknown[]>('listBrands'); }
+  listStaff() { return this.call<StaffRecord[]>('listStaff'); }
+  createStaff(payload: Record<string, unknown>) { return this.call<StaffRecord>('createStaff', payload); }
+  updateStaff(payload: Record<string, unknown>) { return this.call<StaffRecord>('updateStaff', payload); }
+  setStaffStatus(staffId:string,status:StaffRecord['status']) { return this.call<StaffRecord>('setStaffStatus', {staffId,status}); }
+  resetStaffPassword(staffId:string,newPassword:string) { return this.call<{staffId:string;sessionsRevoked:number}>('resetStaffPassword', {staffId,newPassword}); }
+  listTeams() { return this.call<TeamRecord[]>('listTeams'); }
+  createTeam(payload: Record<string, unknown>) { return this.call<TeamRecord>('createTeam', payload); }
+  updateTeam(payload: Record<string, unknown>) { return this.call<TeamRecord>('updateTeam', payload); }
+  listBrands() { return this.call<BrandRecord[]>('listBrands'); }
+  createBrand(payload: Record<string, unknown>) { return this.call<BrandRecord>('createBrand', payload); }
+  updateBrand(payload: Record<string, unknown>) { return this.call<BrandRecord>('updateBrand', payload); }
   getMyWork(page = 1, pageSize = 50) { return this.call<unknown>('getMyWork', { page, pageSize }); }
   getAffiliate(affiliateId: string) { return this.call<unknown>('getAffiliate', { affiliateId }); }
   invoke<T>(action: string, payload: Record<string, unknown>) { return this.call<T>(action, payload); }

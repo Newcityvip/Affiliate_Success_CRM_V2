@@ -1,11 +1,11 @@
 # Exact Apps Script setup checklist
 
-1. Open the dedicated CRM V2 Google Spreadsheet that already contains the 15 sheets.
+1. Open the dedicated CRM V2 Google Spreadsheet.
 2. Choose **Extensions → Apps Script**. Use this spreadsheet-bound Apps Script project; do not connect the old CRM project.
-3. Add these repository files to the Apps Script project: `Api.gs`, `Auth.gs`, `Config.gs`, `Schema.gs`, `Services.gs`, `Setup.gs`, and `Store.gs`. In Project Settings, enable **Show "appsscript.json" manifest file in editor**, then replace it with `backend/appsscript.json`.
+3. Add these repository files to the Apps Script project: `Admin.gs`, `Api.gs`, `Auth.gs`, `Config.gs`, `Schema.gs`, `Services.gs`, `Setup.gs`, and `Store.gs`. In Project Settings, enable **Show "appsscript.json" manifest file in editor**, then replace it with `backend/appsscript.json`.
 4. Open **Project Settings → Script properties → Add script property**. Set the property name to `SPREADSHEET_ID` and the value to the ID between `/d/` and `/edit` in the spreadsheet URL.
 5. Select `validateSpreadsheetSchema` in the function selector and click **Run**. Approve the requested spreadsheet authorization.
-6. Inspect the execution result. Success is an object with `ok: true`, all 15 names in `okSheets`, and empty arrays for `missingSheets`, `headerMismatches`, `duplicateHeaders`, `missingRequiredColumns`, and `unexpectedColumns`. If it is not successful, fix the spreadsheet manually; do not run an automatic migration.
+6. Inspect the execution result. Success is an object with `ok: true`, all 16 names in `okSheets`, and empty arrays for `missingSheets`, `headerMismatches`, `duplicateHeaders`, `missingRequiredColumns`, and `unexpectedColumns`. If it is not successful, fix the spreadsheet manually; do not run an automatic migration.
 7. In the editor only, run `createInitialSuperAdmin('username', 'a password of at least 12 characters', 'Display Name', 'email@example.com')`. Apps Script's function selector cannot supply parameters directly, so temporarily add a local wrapper that calls it, run the wrapper once, then delete the wrapper before deployment. The function refuses to run if an active Super Admin already exists. It returns only the new Staff ID and username; it never logs or returns the password. Confirm the `Staff_List` and `Audit_Log` rows.
 8. Optionally run `addMissingSystemConfigDefaults()`. This inserts only absent supported keys and preserves every existing administrator value.
 9. Choose **Deploy → New deployment**. Select type **Web app**.
@@ -29,3 +29,13 @@ Passwords are never stored in plaintext. They use a unique random salt and an it
 ## Login timing logs
 
 Successful and failed login executions write structured `login_timing` and `api_timing` entries to the Apps Script execution log. They contain only action name, request ID, success state, and elapsed milliseconds for configuration/rate limiting, staff lookup, password verification, session creation, audit writing, parsing, and total execution. They never include usernames, passwords, password hashes, tokens, or affiliate records. Cold-start time outside script execution may still add latency that these stage timings cannot eliminate.
+
+## Existing 15-sheet database migration
+
+1. Copy the changed backend files listed in the release report, including the new `Admin.gs`, into Apps Script and save.
+2. Run `validateSpreadsheetSchema()`. It must be read-only and should report only `Team_List` in `missingSheets`; the existing 15 sheets must remain in `okSheets` with no header or duplicate errors.
+3. Run `setupSpreadsheet()`. It may create only `Team_List` with the ten documented headers and append `Team | TEM | 0 | <timestamp>` to `ID_Counters` only when that counter is absent.
+4. Run `validateSpreadsheetSchema()` again. Expected: `ok=true`, all 16 sheets in `okSheets`, and every problem array empty.
+5. Choose **Deploy → Manage deployments**, edit the existing Web App, select **New version**, and deploy.
+6. Preserve **Execute as: Me** and **Who has access: Anyone**.
+7. Confirm the existing `/exec` URL is unchanged, then test Admin → Teams, Staff & Access, and Brands as the real `SUPER_ADMIN`.

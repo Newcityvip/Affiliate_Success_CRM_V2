@@ -17,7 +17,7 @@ export function AppShell({children}:{children:React.ReactNode}) {
   if(pathname==='/')return children;
   async function logout(){try{await api.logout()}finally{localStorage.removeItem('crm_session_token');localStorage.removeItem('crm_user');router.replace('/')}}
   return <div className="shell"><aside className="sidebar"><div className="brand-row"><div className="logo-mark small">AS</div><div><strong>Affiliate Success</strong><span>CRM V2</span></div></div>
-    <nav className="nav">{navigation.map(([label,href,icon])=><Link className={pathname.startsWith(href)?'active':''} href={href} key={href}><i>{icon}</i>{label}</Link>)}</nav>
+    <nav className="nav">{navigation.filter(([,href])=>href!=='/admin'||user?.role==='ADMIN'||user?.role==='SUPER_ADMIN').map(([label,href,icon])=><Link className={pathname.startsWith(href)?'active':''} href={href} key={href}><i>{icon}</i>{label}</Link>)}</nav>
     <div className="profile"><div className="avatar">{initials_(user)}</div><div><strong>{user?.displayName||user?.username||'Signed-in user'}</strong><span>{user?.role?user.role.replace('_',' '):'Loading profile…'}</span></div><button onClick={logout} title="Sign out">↪</button></div>
   </aside><main className="main"><header className="topbar"><div><b>Operations workspace</b><span> / CRM V2</span></div></header><div className="page-content">{children}</div></main></div>;
 }

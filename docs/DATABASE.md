@@ -1,11 +1,12 @@
 # CRM V2 Google Sheets contract
 
-The existing database has exactly 15 sheets. `backend/Schema.gs` is the executable contract; the exact headers are repeated here for deployment review.
+The database contract now contains exactly 16 sheets. `backend/Schema.gs` is the executable contract; the exact headers are repeated here for deployment review.
 
 | Sheet | Exact headers, left to right |
 |---|---|
 | Affiliates | Affiliate_ID, Affiliate_Username, Email, Phone, Brand_ID, Market, Country, Language, Affiliate_Name, Preferred_Channel, Telegram_Username, Telegram_Status, Lifecycle_Status, Health_Status, Priority, Prospect_Status, Archive_Status, Archive_Reason, First_Added_At, Last_Contact_At, Last_Meaningful_Contact_At, Telegram_Connected_At, Archived_At, Created_At, Updated_At, Created_By, Updated_By |
 | Staff_List | Staff_ID, Username, Password_Hash, Display_Name, Email, Role, Team, Status, Prospect_Target, Max_Managed_Affiliates, Last_Login_At, Password_Changed_At, Created_At, Updated_At, Created_By, Updated_By |
+| Team_List | Team_ID, Team_Name, Team_Code, Status, Default_Prospect_Target, Default_Max_Managed_Affiliates, Created_At, Updated_At, Created_By, Updated_By |
 | Brand_List | Brand_ID, Brand_Name, Brand_Code, Market, Default_Language, Status, Sort_Order, Created_At, Updated_At, Created_By, Updated_By |
 | Assignments | Assignment_ID, Affiliate_ID, Staff_ID, Brand_ID, Assignment_Type, Status, Assigned_At, Activated_At, Ended_At, End_Reason, Previous_Assignment_ID, Import_Batch_ID, Assigned_By, Created_At, Updated_At |
 | Work_Items | Work_ID, Affiliate_ID, Assignment_ID, Staff_ID, Work_Type, Work_Channel, Priority, Status, Title, Reason, Generated_By, Assigned_At, Due_At, Started_At, Completed_At, Outcome, Completion_Notes, Next_Action_At, SLA_Minutes, Escalation_Level, Is_Auto_Generated, Parent_Work_ID, Created_At, Updated_At |
@@ -24,8 +25,8 @@ The existing database has exactly 15 sheets. `backend/Schema.gs` is the executab
 
 `validateSpreadsheetSchema()` is read-only. It returns `ok`, `okSheets`, `missingSheets`, `headerMismatches`, `duplicateHeaders`, `missingRequiredColumns`, and `unexpectedColumns`. Each mismatch identifies the sheet, expected header, actual header, and one-based column position.
 
-`setupSpreadsheet()` first validates every existing sheet. If any existing header differs, it throws a detailed error and changes nothing. If validation finds only missing sheets, it creates those sheets with their headers. It never clears rows, edits existing headers, deletes or reorders sheets, renames columns, or overwrites data.
+`setupSpreadsheet()` first validates every existing sheet. For this migration it may create only the missing `Team_List` sheet and may append only the missing `Team | TEM | 0 | <timestamp>` counter row. Missing legacy sheets, header differences, duplicate Team counters, or a wrong Team prefix cause a clear refusal. It never clears rows, edits existing headers, deletes or reorders sheets, renames columns, or overwrites existing data or counters.
 
 ## Stable IDs
 
-`nextId(entity)` takes a script lock, reads the matching `ID_Counters` entry, increments it atomically, and returns a six-digit ID. When a counter is absent, it initializes above the highest matching permanent ID already present, preventing reuse in a populated sheet. Duplicate counter rows, wrong prefixes, invalid numbers, and unknown entities fail without mutation. Supported mappings are Affiliate/AFF, Staff/STF, Brand/BRD, Assignment/ASN, Work/WRK, Attempt/ATM, Interaction/INT, Followup/FUP, Issue/ISS, Performance/PRF, Import/IMP, Audit/AUD, and Session/SES. The function is server-only and is not routed through the API.
+`nextId(entity)` takes a script lock, reads the matching `ID_Counters` entry, increments it atomically, and returns a six-digit ID. When a counter is absent, it initializes above the highest matching permanent ID already present, preventing reuse in a populated sheet. Duplicate counter rows, wrong prefixes, invalid numbers, and unknown entities fail without mutation. Supported mappings include Team/TEM alongside Affiliate/AFF, Staff/STF, Brand/BRD, Assignment/ASN, Work/WRK, Attempt/ATM, Interaction/INT, Followup/FUP, Issue/ISS, Performance/PRF, Import/IMP, Audit/AUD, and Session/SES. The function is server-only and is not routed through the API.
