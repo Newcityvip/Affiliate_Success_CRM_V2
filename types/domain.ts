@@ -1,0 +1,25 @@
+export type AffiliateLifecycle =
+  | 'UNASSIGNED'
+  | 'ASSIGNED'
+  | 'CONTACT_PENDING'
+  | 'CONTACTING'
+  | 'CALLBACK'
+  | 'TELEGRAM_ONBOARDING'
+  | 'TELEGRAM_CONNECTED'
+  | 'MANAGED'
+  | 'AT_RISK'
+  | 'DORMANT'
+  | 'REACTIVATION'
+  | 'CLOSED';
+
+export type ContactOutcome =
+  | 'CONNECTED'
+  | 'NO_ANSWER'
+  | 'BUSY'
+  | 'UNREACHABLE'
+  | 'WRONG_PERSON'
+  | 'INVALID_NUMBER'
+  | 'CALLBACK_REQUESTED'
+  | 'NOT_INTERESTED'
+  | 'STOPPED_WORKING'
+  | 'TELEGRAM_CONNECTED';
