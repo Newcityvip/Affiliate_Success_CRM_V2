@@ -1,4 +1,4 @@
-const actions = [
+const actions = [ // SAMPLE DATA: replace with api.getMyWorkQueue().
   { type: 'Call', affiliate: 'AFF09123', reason: 'New prospect - first attempt', due: '10:30', priority: 'High' },
   { type: 'Telegram', affiliate: 'AFF00481', reason: 'FTD down 58% - at risk', due: '11:00', priority: 'Critical' },
   { type: 'Callback', affiliate: 'AFF02114', reason: 'Requested callback', due: '11:20', priority: 'High' },
@@ -9,7 +9,7 @@ export default function MyWorkPage() {
   return (
     <>
       <h1>My Work</h1>
-      <p className="muted">The queue is ordered by SLA, risk and expected business value.</p>
+      <p className="muted">The queue is ordered by SLA, risk and expected business value. <span className="accent">Sample preview</span></p>
       <section className="grid" style={{ marginTop: 20 }}>
         <div className="card"><div className="muted">Remaining</div><div className="kpi">17</div></div>
         <div className="card"><div className="muted">Completed</div><div className="kpi">13</div></div>

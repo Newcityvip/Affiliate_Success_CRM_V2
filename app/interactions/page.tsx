@@ -1,0 +1,1 @@
+import { ModulePage } from '@/components/module-page'; export default function Page(){return <ModulePage title="Interactions" icon="◌" description="Append-only history of meaningful affiliate conversations."/>}

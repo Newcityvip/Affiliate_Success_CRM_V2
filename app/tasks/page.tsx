@@ -1,0 +1,1 @@
+import { ModulePage } from '@/components/module-page'; export default function Page(){return <ModulePage title="Tasks" icon="□" description="Authorized operational tasks across the affiliate portfolio."/>}

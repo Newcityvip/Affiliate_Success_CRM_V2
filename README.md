@@ -1,32 +1,22 @@
 # Affiliate Success CRM V2
 
-Execution-first affiliate success CRM built independently from the existing production CRM.
+An independent, zero-license-cost CRM foundation for affiliate operations.
 
-## Proposed stack
-- Next.js + TypeScript
-- PostgreSQL via Supabase
-- Supabase Auth / RLS
-- Scheduled/background work generation
+## Architecture
 
-## Included in this starter
-- Command Center shell
-- My Work queue shell
-- Affiliate 360 placeholder
-- Admin Bulk Import/Assignment shell
-- PostgreSQL/Supabase initial schema
-- Lifecycle and work-priority domain types
-- Master product blueprint
+- Static Next.js + TypeScript frontend on GitHub Pages
+- Google Apps Script Web App API in `backend/`
+- Google Sheets database with stable IDs and append-only history
+- Cloudflare custom-domain IP policy for the production edge
 
-## Start locally
-1. Copy `.env.example` to `.env.local`
-2. Create a Supabase project
-3. Apply `supabase/migrations/0001_initial_schema.sql`
-4. `npm install`
-5. `npm run dev`
+Development URL: `https://newcityvip.github.io/Affiliate_Success_CRM_V2/`
 
-## Build sequence
-Phase 1: Auth, roles, staff/brand admin, affiliate bulk import and assignment
-Phase 2: Contact queue, retry/callback, Telegram-connected transition, closure/replacement
-Phase 3: Managed portfolio, follow-ups, interactions, Affiliate 360
-Phase 4: Performance imports, health/risk/opportunity scoring
-Phase 5: Manager command center, KPIs, audit, QA and rollout controls
+## Local development
+
+1. Copy `.env.example` to `.env.local`.
+2. Set `NEXT_PUBLIC_API_BASE_URL` to an Apps Script `/exec` deployment URL.
+3. Run `npm install` and `npm run dev`.
+
+`npm run build` writes the deployable static site to `out/`. No credentials or final API URL belong in Git.
+
+See [database schema](docs/DATABASE.md), [Apps Script deployment](docs/APPS_SCRIPT_DEPLOYMENT.md), [production security](docs/SECURITY_AND_DEPLOYMENT.md), and [workflow rules](docs/WORK_ENGINE.md).

@@ -1,5 +1,5 @@
 import './globals.css';
-import Link from 'next/link';
+import { AppShell } from '@/components/app-shell';
 
 export const metadata = {
   title: 'Affiliate Success CRM V2',
@@ -10,18 +10,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body>
-        <div className="shell">
-          <aside className="sidebar">
-            <div className="brand">Affiliate Success CRM V2</div>
-            <nav className="nav">
-              <Link href="/dashboard">Command Center</Link>
-              <Link href="/my-work">My Work</Link>
-              <Link href="/affiliates">Affiliates</Link>
-              <Link href="/admin/import">Bulk Import</Link>
-            </nav>
-          </aside>
-          <main className="main">{children}</main>
-        </div>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

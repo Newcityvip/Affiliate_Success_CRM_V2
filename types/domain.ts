@@ -3,14 +3,21 @@ export type AffiliateLifecycle =
   | 'ASSIGNED'
   | 'CONTACT_PENDING'
   | 'CONTACTING'
+  | 'CONNECTED'
   | 'CALLBACK'
+  | 'RETRY'
   | 'TELEGRAM_ONBOARDING'
   | 'TELEGRAM_CONNECTED'
   | 'MANAGED'
   | 'AT_RISK'
   | 'DORMANT'
   | 'REACTIVATION'
-  | 'CLOSED';
+  | 'CONTACT_EXHAUSTED'
+  | 'ARCHIVED'
+  | 'REPLACEMENT_REQUIRED';
+
+export type WorkStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'SKIPPED' | 'CANCELLED' | 'OVERDUE';
+export type StaffRole = 'STAFF' | 'SUPERVISOR' | 'ADMIN' | 'SUPER_ADMIN';
 
 export type ContactOutcome =
   | 'CONNECTED'

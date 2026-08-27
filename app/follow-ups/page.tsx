@@ -1,0 +1,1 @@
+import { ModulePage } from '@/components/module-page'; export default function Page(){return <ModulePage title="Follow-ups" icon="↗" description="Scheduled callbacks and commitments requiring attention."/>}

@@ -1,0 +1,1 @@
+import { ModulePage } from '@/components/module-page'; export default function Page(){return <ModulePage title="Performance" icon="⌁" description="Monthly affiliate outcomes and portfolio movement."/>}
