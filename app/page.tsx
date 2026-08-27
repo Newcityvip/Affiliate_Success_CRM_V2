@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api-client';
 
@@ -8,19 +8,22 @@ export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
     setBusy(true); setError('');
     const data = new FormData(event.currentTarget);
     try {
       const session = await api.login(String(data.get('username')), String(data.get('password')));
       localStorage.setItem('crm_session_token', session.token);
       localStorage.setItem('crm_user', JSON.stringify(session.user));
-      router.push('/dashboard');
+      router.replace('/dashboard');
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : 'Unable to sign in. Check the API configuration.');
-    } finally { setBusy(false); }
+    } finally { submitting.current = false; setBusy(false); }
   }
 
   return <main className="login-page">
@@ -32,7 +35,7 @@ export default function LoginPage() {
     </section>
     <section className="login-panel"><div className="login-box">
       <span className="eyebrow">WELCOME BACK</span><h2>Sign in to your workspace</h2><p className="muted">Use your staff credentials to continue.</p>
-      <form onSubmit={submit} className="login-form">
+      <form onSubmit={submit} className="login-form" aria-busy={busy}>
         <label>Username<input name="username" required autoComplete="username" placeholder="Enter your username" /></label>
         <label>Password<input name="password" type="password" required autoComplete="current-password" placeholder="Enter your password" /></label>
         {error && <div className="error-message">{error}</div>}

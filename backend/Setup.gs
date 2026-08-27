@@ -1,6 +1,6 @@
 /** Read-only validation of all 15 required sheets. */
 function validateSpreadsheetSchema(){
-  var ss=spreadsheet_(),result={ok:true,okSheets:[],missingSheets:[],headerMismatches:[],duplicateHeaders:[],missingRequiredColumns:[],unexpectedColumns:[]};
+  beginRequest_();var ss=spreadsheet_(),result={ok:true,okSheets:[],missingSheets:[],headerMismatches:[],duplicateHeaders:[],missingRequiredColumns:[],unexpectedColumns:[]};
   Object.keys(SCHEMA).forEach(function(name){
     var expected=SCHEMA[name],s=ss.getSheetByName(name);if(!s){result.missingSheets.push(name);return}
     var width=Math.max(s.getLastColumn(),expected.length),actual=s.getRange(1,1,1,width).getDisplayValues()[0].map(function(x){return String(x).trim()});
@@ -22,7 +22,7 @@ function schemaErrorMessage_(r){var parts=['Spreadsheet schema validation failed
 
 /** Manual editor-only bootstrap. Never expose this through route_(). */
 function createInitialSuperAdmin(username,password,displayName,email){
-  username=String(username||'').trim();if(!username||!displayName||!email)throw new Error('Username, display name, and email are required.');
+  beginRequest_();username=String(username||'').trim();if(!username||!displayName||!email)throw new Error('Username, display name, and email are required.');
   var lock=LockService.getScriptLock();lock.waitLock(30000);var user;
   try{var staffRows=rows_('Staff_List'),active=staffRows.some(function(s){return s.Role==='SUPER_ADMIN'&&s.Status==='ACTIVE'});if(active)throw new Error('Bootstrap refused: an active SUPER_ADMIN already exists.');if(staffRows.some(function(s){return String(s.Username).toLowerCase()===username.toLowerCase()}))throw new Error('Bootstrap refused: username already exists.');var t=now_(),id=nextIdUnlocked_('Staff');user={Staff_ID:id,Username:username,Password_Hash:createPasswordHash(password),Display_Name:displayName,Email:email,Role:'SUPER_ADMIN',Team:'ADMIN',Status:'ACTIVE',Prospect_Target:config_('DEFAULT_PROSPECT_TARGET'),Max_Managed_Affiliates:'',Last_Login_At:'',Password_Changed_At:t,Created_At:t,Updated_At:t,Created_By:'SYSTEM_BOOTSTRAP',Updated_By:'SYSTEM_BOOTSTRAP'};appendRows_('Staff_List',[user])}finally{lock.releaseLock()}
   audit_(user,'BOOTSTRAP_SUPER_ADMIN','Staff',user.Staff_ID,'',null,{Staff_ID:user.Staff_ID,Username:user.Username,Role:user.Role},{details:'Initial Super Admin created from Apps Script editor',force:true});return {created:true,staffId:user.Staff_ID,username:user.Username};

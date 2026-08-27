@@ -12,7 +12,7 @@ function config_(key){
 function parseConfig_(value,type,fallback){type=String(type||'').toUpperCase();if(type==='BOOLEAN'||typeof fallback==='boolean')return String(value).toUpperCase()==='TRUE';if(type==='NUMBER'||typeof fallback==='number'){var n=Number(value);return isFinite(n)?n:fallback}return value}
 /** Adds only absent defaults. It never changes an existing administrator value. */
 function addMissingSystemConfigDefaults(){
-  var existing=rows_('System_Config'),present={};existing.forEach(function(r){present[r.Config_Key]=true});var created=[];
+  beginRequest_();var existing=rows_('System_Config'),present={};existing.forEach(function(r){present[r.Config_Key]=true});var created=[];
   Object.keys(CONFIG_DEFAULTS).forEach(function(key){if(!present[key])created.push({Config_Key:key,Config_Value:String(CONFIG_DEFAULTS[key]),Value_Type:typeof CONFIG_DEFAULTS[key]==='boolean'?'BOOLEAN':'NUMBER',Category:'SYSTEM',Description:'Code default; review before production use',Is_Active:'TRUE',Updated_At:now_(),Updated_By:'SYSTEM'})});
   appendRows_('System_Config',created);return {created:created.map(function(x){return x.Config_Key}),preserved:existing.map(function(x){return x.Config_Key})};
 }

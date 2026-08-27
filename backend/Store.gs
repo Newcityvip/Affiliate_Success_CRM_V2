@@ -1,18 +1,21 @@
+var REQUEST_CONTEXT=null;
+function beginRequest_(){REQUEST_CONTEXT={spreadsheet:null,sheets:{},rows:{}}}
+function context_(){if(!REQUEST_CONTEXT)beginRequest_();return REQUEST_CONTEXT}
 function spreadsheet_() {
+  var ctx=context_();if(ctx.spreadsheet)return ctx.spreadsheet;
   var id=PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
   if(!id)throw apiError_('CONFIG_ERROR','Service configuration is incomplete.','SPREADSHEET_ID is not configured.');
-  return SpreadsheetApp.openById(id);
+  ctx.spreadsheet=SpreadsheetApp.openById(id);return ctx.spreadsheet;
 }
-function sheet_(name){if(!SCHEMA[name])throw new Error('Unknown schema name: '+name);var s=spreadsheet_().getSheetByName(name);if(!s)throw apiError_('SCHEMA_ERROR','Service configuration is incomplete.','Missing sheet: '+name);return s}
+function sheet_(name){if(!SCHEMA[name])throw new Error('Unknown schema name: '+name);var ctx=context_();if(ctx.sheets[name])return ctx.sheets[name];var s=spreadsheet_().getSheetByName(name);if(!s)throw apiError_('SCHEMA_ERROR','Service configuration is incomplete.','Missing sheet: '+name);ctx.sheets[name]=s;return s}
 function rows_(name){
-  var s=sheet_(name),headers=SCHEMA[name],last=s.getLastRow();if(last<2)return [];
-  var values=s.getRange(2,1,last-1,headers.length).getValues();return values.map(function(row){var o={};headers.forEach(function(h,i){o[h]=row[i]});return o});
+  var ctx=context_();if(ctx.rows[name])return ctx.rows[name];var s=sheet_(name),headers=SCHEMA[name],last=s.getLastRow();if(last<2)return ctx.rows[name]=[];
+  var values=s.getRange(2,1,last-1,headers.length).getValues();return ctx.rows[name]=values.map(function(row){var o={};headers.forEach(function(h,i){o[h]=row[i]});return o});
 }
+function findRowRecord_(name,column,value,caseSensitive){var headers=SCHEMA[name],columnIndex=headers.indexOf(column);if(columnIndex<0)throw new Error('Unknown lookup column '+column+' for '+name);var s=sheet_(name),match=s.getRange(2,columnIndex+1,Math.max(s.getLastRow()-1,1),1).createTextFinder(String(value)).matchEntireCell(true).matchCase(caseSensitive!==false).findNext();if(!match)return null;var row=s.getRange(match.getRow(),1,1,headers.length).getValues()[0],object={};headers.forEach(function(h,i){object[h]=row[i]});return {rowNumber:match.getRow(),value:object}}
+function findRow_(name,column,value,caseSensitive){var found=findRowRecord_(name,column,value,caseSensitive);return found&&found.value}
 function appendRows_(name,objects){if(!objects.length)return;var headers=SCHEMA[name],values=objects.map(function(o){return headers.map(function(h){return o[h]===undefined?'':o[h]})});var s=sheet_(name);s.getRange(s.getLastRow()+1,1,values.length,headers.length).setValues(values);clearCache_(name)}
-function updateById_(name,idColumn,id,changes){
-  var s=sheet_(name),headers=SCHEMA[name],last=s.getLastRow(),idx=headers.indexOf(idColumn);if(idx<0)throw new Error('Unknown ID column '+idColumn+' for '+name);if(last<2)return null;
-  var values=s.getRange(2,1,last-1,headers.length).getValues();for(var i=0;i<values.length;i++)if(String(values[i][idx])===String(id)){var before={};headers.forEach(function(h,j){before[h]=values[i][j];if(changes[h]!==undefined)values[i][j]=changes[h]});s.getRange(i+2,1,1,headers.length).setValues([values[i]]);clearCache_(name);return before}return null;
-}
+function updateById_(name,idColumn,id,changes){var headers=SCHEMA[name],found=findRowRecord_(name,idColumn,id,true);if(!found)return null;var before=found.value,row=headers.map(function(h){return changes[h]===undefined?before[h]:changes[h]});sheet_(name).getRange(found.rowNumber,1,1,headers.length).setValues([row]);clearCache_(name);return before}
 function nextId(entity){var lock=LockService.getScriptLock();lock.waitLock(30000);try{return nextIdUnlocked_(entity)}finally{lock.releaseLock()}}
 function nextIdUnlocked_(entity){
   var prefix=ID_DEFINITIONS[entity];if(!prefix)throw new Error('Unknown ID entity: '+entity);
@@ -23,6 +26,6 @@ function nextIdUnlocked_(entity){
 }
 function now_(){return new Date().toISOString()}
 function cacheRows_(name,seconds){var c=CacheService.getScriptCache(),key='rows:'+name,cached=c.get(key);if(cached)return JSON.parse(cached);var data=rows_(name);c.put(key,JSON.stringify(data),seconds||300);return data}
-function clearCache_(name){CacheService.getScriptCache().remove('rows:'+name)}
+function clearCache_(name){var ctx=context_();delete ctx.rows[name];CacheService.getScriptCache().remove('rows:'+name)}
 function audit_(user,action,type,id,affiliateId,before,after,context){context=context||{};if(!context.force&&!config_('AUDIT_ENABLED'))return;appendRows_('Audit_Log',[{Audit_ID:nextId('Audit'),Timestamp:now_(),User_ID:user&&user.Staff_ID||'SYSTEM',Username:user&&user.Username||'SYSTEM',Role:user&&user.Role||'SYSTEM',Action:action,Entity_Type:type,Entity_ID:id||'',Affiliate_ID:affiliateId||'',Old_Value:JSON.stringify(before||null),New_Value:JSON.stringify(after||null),Details:context.details||'',IP_Address:'',Session_ID:context.sessionId||'',Request_ID:context.requestId||''}])}
 function page_(items,payload){var size=Math.max(1,Math.min(Number(payload.pageSize)||50,100)),page=Math.max(1,Number(payload.page)||1),start=(page-1)*size;return {items:items.slice(start,start+size),page:page,pageSize:size,total:items.length}}

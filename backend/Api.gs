@@ -1,7 +1,8 @@
 function doGet(){return json_({ok:false,error:{code:'METHOD_NOT_ALLOWED',message:'Use POST.'}})}
 function doPost(e){
-  try{var request=JSON.parse(e&&e.postData&&e.postData.contents||'{}');return json_({ok:true,data:route_(request)})}
-  catch(err){console.error(err&&err.internalMessage||err&&err.stack||err);var safe=['INVALID_REQUEST','INVALID_CREDENTIALS','LOGIN_LIMITED','UNAUTHENTICATED','SESSION_EXPIRED','FORBIDDEN','NOT_FOUND','INVALID_STATE','INVALID_STATUS','VALIDATION_FAILED','UNKNOWN_ACTION'];return json_({ok:false,error:{code:safe.indexOf(err.code)>=0?err.code:'INTERNAL_ERROR',message:safe.indexOf(err.code)>=0?err.message:'The request could not be completed.'}})}
+  var totalStart=Date.now(),parseStart=Date.now(),request={};beginRequest_();
+  try{request=JSON.parse(e&&e.postData&&e.postData.contents||'{}');var parseMs=Date.now()-parseStart,data=route_(request);console.log(JSON.stringify({event:'api_timing',action:String(request.action||''),requestParseMs:parseMs,totalMs:Date.now()-totalStart}));return json_({ok:true,data:data})}
+  catch(err){console.error(err&&err.internalMessage||err&&err.stack||err);console.log(JSON.stringify({event:'api_timing',action:String(request.action||''),failed:true,totalMs:Date.now()-totalStart}));var safe=['INVALID_REQUEST','INVALID_CREDENTIALS','LOGIN_LIMITED','UNAUTHENTICATED','SESSION_EXPIRED','FORBIDDEN','NOT_FOUND','INVALID_STATE','INVALID_STATUS','VALIDATION_FAILED','UNKNOWN_ACTION'];return json_({ok:false,error:{code:safe.indexOf(err.code)>=0?err.code:'INTERNAL_ERROR',message:safe.indexOf(err.code)>=0?err.message:'The request could not be completed.'}})}
 }
 function route_(request){
   var action=String(request.action||''),p=request.payload||{};p.requestId=String(request.requestId||Utilities.getUuid());if(action==='login')return login_(p);

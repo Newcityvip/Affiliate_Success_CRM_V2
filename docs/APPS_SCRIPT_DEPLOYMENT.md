@@ -14,7 +14,7 @@
 12. Click **Deploy**, authorize if prompted, and copy the final URL ending in `/exec`. Do not use the `/dev` test URL.
 13. In GitHub, open `Newcityvip/Affiliate_Success_CRM_V2` → **Settings → Secrets and variables → Actions → Secrets → New repository secret**. Name it `NEXT_PUBLIC_API_BASE_URL` and use the `/exec` URL as its value. A secret is preferred even though the built frontend necessarily contains this public endpoint.
 14. Open **Actions → Deploy CRM to GitHub Pages → Run workflow** on `main`.
-15. Open `https://newcityvip.github.io/Affiliate_Success_CRM_V2/` and test a valid login. Confirm `Last_Login_At`, an active hashed-token row in `Sessions`, and a `LOGIN` entry in `Audit_Log`.
+15. Open `https://newcityvip.github.io/Affiliate_Success_CRM_V2/` and test a valid login. Confirm an active hashed-token row in `Sessions` and a `LOGIN` entry in `Audit_Log`.
 16. Test logout. Confirm the session has `Status=REVOKED` and `Revoked_At`. Temporarily lower `SESSION_HOURS` in `System_Config` for an expiry test, then restore the intended value.
 17. Create two STAFF accounts and assignments. Confirm each can retrieve only their own work and assigned affiliates, and cannot retrieve the other's affiliate by ID.
 18. Confirm an ADMIN can call staff/brand listing, import validation/commit, assignment, transfer, archive, and reopen operations. Confirm STAFF receives `FORBIDDEN` for those actions.
@@ -25,3 +25,7 @@
 The frontend sends JSON as `text/plain;charset=utf-8`, making the POST a CORS-simple request that is compatible with Apps Script Web Apps and their redirect behavior. There is no client-origin allowlist presented as authentication: `Origin` can be spoofed outside a browser. Every protected action validates the session-token hash and derives user identity and role from the session and `Staff_List`.
 
 Passwords are never stored in plaintext. They use a unique random salt and an iterated HMAC-SHA-256 derivation. Login returns the same error whether the username is absent, inactive, suspended, or the password is wrong. Only token hashes are stored. Expiry uses the administrator's active `SESSION_HOURS` value or the safe code default when absent.
+
+## Login timing logs
+
+Successful and failed login executions write structured `login_timing` and `api_timing` entries to the Apps Script execution log. They contain only action name, request ID, success state, and elapsed milliseconds for configuration/rate limiting, staff lookup, password verification, session creation, audit writing, parsing, and total execution. They never include usernames, passwords, password hashes, tokens, or affiliate records. Cold-start time outside script execution may still add latency that these stage timings cannot eliminate.
