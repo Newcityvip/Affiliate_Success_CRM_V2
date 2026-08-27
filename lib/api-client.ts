@@ -15,13 +15,13 @@ class ApiClient {
     if (!response.ok || !result.ok) throw new ApiError(result.error?.message ?? 'Request failed.', result.error?.code);
     return result.data as T;
   }
-  login(username: string, password: string) { return this.call<LoginResponse>('login', { username, password }); }
+  login(username: string, password: string) { return this.call<LoginResponse>('login', { username, password, userAgent: typeof navigator === 'undefined' ? '' : navigator.userAgent }); }
   logout() { return this.call<void>('logout'); }
   validateSession() { return this.call<{ valid: boolean }>('validateSession'); }
   currentUser() { return this.call<CurrentUser>('currentUser'); }
   listStaff() { return this.call<unknown[]>('listStaff'); }
   listBrands() { return this.call<unknown[]>('listBrands'); }
-  getMyWorkQueue(page = 1, pageSize = 50) { return this.call<unknown>('getMyWorkQueue', { page, pageSize }); }
+  getMyWork(page = 1, pageSize = 50) { return this.call<unknown>('getMyWork', { page, pageSize }); }
   getAffiliate(affiliateId: string) { return this.call<unknown>('getAffiliate', { affiliateId }); }
   invoke<T>(action: string, payload: Record<string, unknown>) { return this.call<T>(action, payload); }
 }

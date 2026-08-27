@@ -1,15 +1,15 @@
-function doGet(){return json_({ok:true,data:{service:'Affiliate Success CRM V2 API',status:'ready'}})}
+function doGet(){return json_({ok:false,error:{code:'METHOD_NOT_ALLOWED',message:'Use POST.'}})}
 function doPost(e){
-  var request={};try{request=JSON.parse(e&&e.postData&&e.postData.contents||'{}');var data=route_(request);return json_({ok:true,data:data})}
-  catch(err){return json_({ok:false,error:{code:err.code||'INTERNAL_ERROR',message:err.code?err.message:'Unexpected server error.'}})}
+  try{var request=JSON.parse(e&&e.postData&&e.postData.contents||'{}');return json_({ok:true,data:route_(request)})}
+  catch(err){console.error(err&&err.internalMessage||err&&err.stack||err);var safe=['INVALID_REQUEST','INVALID_CREDENTIALS','LOGIN_LIMITED','UNAUTHENTICATED','SESSION_EXPIRED','FORBIDDEN','NOT_FOUND','INVALID_STATE','INVALID_STATUS','VALIDATION_FAILED','UNKNOWN_ACTION'];return json_({ok:false,error:{code:safe.indexOf(err.code)>=0?err.code:'INTERNAL_ERROR',message:safe.indexOf(err.code)>=0?err.message:'The request could not be completed.'}})}
 }
-function route_(r){
-  var action=String(r.action||''),p=r.payload||{};p.requestId=r.requestId||Utilities.getUuid();if(action==='login')return login_(p);
-  var auth=sessionUser_(r.token),u=auth.staff;
-  var publicActions={logout:function(){return logout_(r.token,u)},validateSession:function(){return {valid:true}},currentUser:function(){return publicUser_(u)},getMyWorkQueue:function(){return myWork_(u,p)},getAffiliate:function(){return affiliate_(u,p)},startWorkItem:function(){return startWork_(u,p)},recordContactAttempt:function(){return contact_(u,p)},recordTelegramConnected:function(){return telegram_(u,p)},completeWorkItem:function(){return completeWork_(u,p)},createFollowup:function(){return followup_(u,p)},logMeaningfulInteraction:function(){return interaction_(u,p)}};
-  if(publicActions[action])return publicActions[action]();
-  requireRole_(u,['ADMIN','SUPER_ADMIN']);var admin={listStaff:function(){return cacheRows_('Staff_List',300).map(publicUser_)},listBrands:function(){return cacheRows_('Brand_List',300)},validateBulkAffiliateImport:function(){return validateImport_(u,p)},importAffiliates:function(){return importAffiliates_(u,p)},assignAffiliates:function(){return assign_(u,p)},transferAffiliate:function(){return transfer_(u,p)},archiveAffiliate:function(){return archive_(u,p)},reopenAffiliate:function(){return reopen_(u,p)}};
-  if(!admin[action])throw apiError_('UNKNOWN_ACTION','Unknown action: '+action);return admin[action]();
+function route_(request){
+  var action=String(request.action||''),p=request.payload||{};p.requestId=String(request.requestId||Utilities.getUuid());if(action==='login')return login_(p);
+  var auth=sessionUser_(request.token),u=auth.staff,session=auth.session;
+  var authenticated={logout:function(){return logout_(request.token,u,session,p.requestId)},currentUser:function(){return publicUser_(u)},validateSession:function(){return {valid:true,expiresAt:session.Expires_At}}};if(authenticated[action])return authenticated[action]();
+  var staffActions={getMyWork:function(){return myWork_(u,p)},getAffiliate:function(){return affiliate_(u,p)},startWork:function(){return startWork_(u,p)},recordContactAttempt:function(){return contact_(u,p)},markTelegramConnected:function(){return telegram_(u,p)},completeWork:function(){return completeWork_(u,p)},createFollowup:function(){return followup_(u,p)},logInteraction:function(){return interaction_(u,p)}};if(staffActions[action])return staffActions[action]();
+  requireRole_(u,['ADMIN','SUPER_ADMIN']);var adminActions={listStaff:function(){return listStaff_()},listBrands:function(){return listBrands_()},validateAffiliateImport:function(){return validateImport_(u,p)},commitAffiliateImport:function(){return importAffiliates_(u,p)},assignAffiliate:function(){return assign_(u,p)},transferAffiliate:function(){return transfer_(u,p)},archiveAffiliate:function(){return archive_(u,p)},reopenAffiliate:function(){return reopen_(u,p)}};
+  if(!adminActions[action])throw apiError_('UNKNOWN_ACTION','Unknown action.','Unknown action: '+action);return adminActions[action]();
 }
 function json_(value){return ContentService.createTextOutput(JSON.stringify(value)).setMimeType(ContentService.MimeType.JSON)}
-function apiError_(code,message){var e=new Error(message);e.code=code;return e}
+function apiError_(code,publicMessage,internalMessage){var e=new Error(publicMessage);e.code=code;e.internalMessage=internalMessage||publicMessage;return e}
