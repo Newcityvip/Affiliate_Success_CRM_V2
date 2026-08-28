@@ -26,6 +26,10 @@ export type DashboardStaff={staffId:string;displayName:string;username:string;te
 export type DashboardAffiliate={affiliateId:string;affiliateUsername:string;affiliateName:string;brandName:string;brandCode:string;staffId:string;staffName:string;lifecycleStatus:string;prospectStatus:string;telegramStatus:string;priority:string;pipelineStage:string;currentWorkId:string;currentWorkType:string;workDueAt:string;nextFollowupAt:string;lastInteractionAt:string;lastOutcome:string;needsAttention:boolean};
 export type DashboardAttention={id:string;type:string;reason:string;affiliateId:string;affiliateUsername:string;staffName:string;dueAt:string};
 export type SuperAdminDashboard={generatedAt:string;kpis:{activeAffiliates:number;activeProspects:number;connectedAffiliates:number;telegramConnected:number;openWork:number;overdueWork:number;followupsDueToday:number;overdueFollowups:number;contactsToday:number;connectionRate:number};pipeline:Record<string,number>;staff:DashboardStaff[];affiliates:DashboardAffiliate[];affiliateTotal:number;needsAttention:DashboardAttention[]};
+export type TaskItem={taskId:string;affiliateId:string;assignmentId:string;staffId:string;ownerName:string;ownerActive:boolean;affiliateUsername:string;affiliateName:string;brandId:string;brandName:string;brandCode:string;taskType:string;title:string;description:string;priority:string;status:string;dueAt:string;startedAt:string;completedAt:string;completionNotes:string;createdAt:string;updatedAt:string;overdue:boolean;dueToday:boolean};
+export type TaskOptions={staff:Array<{staffId:string;displayName:string;team:string}>;affiliates:Array<{affiliateId:string;affiliateUsername:string;affiliateName:string;brandName:string;staffId:string;staffName:string;assignmentId:string;lifecycleStatus:string}>};
+export type TasksResponse={items:TaskItem[];page:number;pageSize:number;total:number;summary:{open:number;overdue:number;dueToday:number;high:number;completed:number};canManage:boolean;options:TaskOptions};
+export type StaffDashboard={generatedAt:string;metrics:{openWork:number;overdueWork:number;workDueToday:number;openFollowups:number;followupsDueToday:number;openTasks:number;overdueTasks:number;contactsToday:number;telegramManaged:number};needsAttention:Array<{id:string;type:string;title:string;affiliateId:string;affiliateUsername:string;dueAt:string;href:string}>};
 
 export class ApiError extends Error { constructor(message: string, public code = 'API_ERROR') { super(message); } }
 type ApiEnvelope<T> = { ok: boolean; data?: T; error?: { code: string; message: string } };
@@ -69,6 +73,13 @@ class ApiClient {
   getMyFollowups(page = 1, pageSize = 200) { return this.call<FollowupsResponse>('getMyFollowups', {page,pageSize}); }
   getMyInteractions(page = 1, pageSize = 500) { return this.call<InteractionsResponse>('getMyInteractions', {page,pageSize}); }
   getSuperAdminDashboard() { return this.call<SuperAdminDashboard>('getSuperAdminDashboard'); }
+  getStaffDashboard() { return this.call<StaffDashboard>('getStaffDashboard'); }
+  getTasks(page=1,pageSize=500) { return this.call<TasksResponse>('getTasks',{page,pageSize}); }
+  createTask(payload:Record<string,unknown>) { return this.call<TaskItem>('createTask',payload).then(result=>{invalidateReadCache('tasks','staff-dashboard','super-admin-dashboard','affiliate-detail');return result}); }
+  startTask(taskId:string) { return this.call<TaskItem>('startTask',{taskId}).then(result=>{invalidateReadCache('tasks','staff-dashboard','super-admin-dashboard','affiliate-detail');return result}); }
+  completeTask(taskId:string,completionNotes:string) { return this.call<TaskItem>('completeTask',{taskId,completionNotes}).then(result=>{invalidateReadCache('tasks','staff-dashboard','super-admin-dashboard','affiliate-detail');return result}); }
+  reassignTask(taskId:string,staffId:string) { return this.call<TaskItem>('reassignTask',{taskId,staffId}).then(result=>{invalidateReadCache('tasks','staff-dashboard','super-admin-dashboard','affiliate-detail');return result}); }
+  cancelTask(taskId:string,notes='') { return this.call<TaskItem>('cancelTask',{taskId,notes}).then(result=>{invalidateReadCache('tasks','staff-dashboard','super-admin-dashboard','affiliate-detail');return result}); }
   listAffiliates(page = 1, pageSize = 500) { return this.call<AffiliateDirectoryResponse>('listAffiliates', {page,pageSize}); }
   getAffiliateDetail(affiliateId:string) { return this.call<AffiliateDetailResponse>('getAffiliateDetail', {affiliateId}); }
   getWorkWorkspace(workId:string) { return this.call<WorkWorkspace>('getWorkWorkspace', {workId}); }

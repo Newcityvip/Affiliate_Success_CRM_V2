@@ -1,4 +1,4 @@
-/** Read-only validation of all 17 required sheets. */
+/** Read-only validation of all required sheets. */
 function validateSpreadsheetSchema(){
   beginRequest_();var ss=spreadsheet_(),result={ok:true,okSheets:[],missingSheets:[],headerMismatches:[],duplicateHeaders:[],missingRequiredColumns:[],unexpectedColumns:[]};
   Object.keys(SCHEMA).forEach(function(name){
@@ -15,13 +15,14 @@ function validateSpreadsheetSchema(){
 /** Creates only missing sheets. Existing sheets and data are never modified. */
 function setupSpreadsheet(){
   var before=validateSpreadsheetSchema();if(before.headerMismatches.length||before.duplicateHeaders.length||before.missingRequiredColumns.length||before.unexpectedColumns.length)throw new Error(schemaErrorMessage_(before));
-  var allowed={Team_List:true,Affiliate_Pool:true},unsupported=before.missingSheets.filter(function(name){return !allowed[name]});if(unsupported.length)throw new Error('Setup refused: only Team_List and Affiliate_Pool may be created. Missing existing sheets: '+unsupported.join(', '));validateTeamCounter_();
+  var allowed={Team_List:true,Affiliate_Pool:true,Tasks:true},unsupported=before.missingSheets.filter(function(name){return !allowed[name]});if(unsupported.length)throw new Error('Setup refused: only Team_List, Affiliate_Pool, and Tasks may be created. Missing existing sheets: '+unsupported.join(', '));validateCounters_();
   var ss=spreadsheet_(),created=[];before.missingSheets.forEach(function(name){var s=ss.insertSheet(name),headers=SCHEMA[name];s.getRange(1,1,1,headers.length).setValues([headers]);s.setFrozenRows(1);created.push(name)});
-  ensureTeamCounter_();
+  ensureCounters_();
   var after=validateSpreadsheetSchema();if(!after.ok)throw new Error(schemaErrorMessage_(after));return {ok:true,createdSheets:created,untouchedSheets:after.okSheets.filter(function(name){return created.indexOf(name)<0})};
 }
-function validateTeamCounter_(){var matches=rows_('ID_Counters').filter(function(r){return r.Entity==='Team'});if(matches.length>1)throw new Error('Setup refused: duplicate Team rows in ID_Counters.');if(matches.length===1&&matches[0].Prefix!=='TEM')throw new Error('Setup refused: Team counter prefix must be TEM.');return matches.length===1}
-function ensureTeamCounter_(){var lock=LockService.getScriptLock();lock.waitLock(30000);try{clearCache_('ID_Counters');if(!validateTeamCounter_())appendRows_('ID_Counters',[{Entity:'Team',Prefix:'TEM',Last_Number:0,Updated_At:now_()}])}finally{lock.releaseLock()}}
+function validateCounter_(entity,prefix){var matches=rows_('ID_Counters').filter(function(r){return r.Entity===entity});if(matches.length>1)throw new Error('Setup refused: duplicate '+entity+' rows in ID_Counters.');if(matches.length===1&&matches[0].Prefix!==prefix)throw new Error('Setup refused: '+entity+' counter prefix must be '+prefix+'.');return matches.length===1}
+function validateCounters_(){validateCounter_('Team','TEM');validateCounter_('Task','TSK')}
+function ensureCounters_(){var lock=LockService.getScriptLock();lock.waitLock(30000);try{clearCache_('ID_Counters');if(!validateCounter_('Team','TEM'))appendRows_('ID_Counters',[{Entity:'Team',Prefix:'TEM',Last_Number:0,Updated_At:now_()}]);clearCache_('ID_Counters');if(!validateCounter_('Task','TSK'))appendRows_('ID_Counters',[{Entity:'Task',Prefix:'TSK',Last_Number:0,Updated_At:now_()}])}finally{lock.releaseLock()}}
 function schemaErrorMessage_(r){var parts=['Spreadsheet schema validation failed.'];r.headerMismatches.forEach(function(x){parts.push(x.sheet+' column '+x.columnPosition+': expected "'+x.expectedHeader+'", actual "'+x.actualHeader+'"')});r.duplicateHeaders.forEach(function(x){parts.push(x.sheet+': duplicate header "'+x.header+'" at column '+x.duplicatePosition)});r.unexpectedColumns.forEach(function(x){parts.push(x.sheet+': unexpected column "'+x.header+'" at position '+x.columnPosition)});r.missingRequiredColumns.forEach(function(x){parts.push(x.sheet+': missing required column "'+x.header+'"')});return parts.join('\n')}
 
 /** Manual editor-only bootstrap. Never expose this through route_(). */

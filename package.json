@@ -14,7 +14,8 @@
     "test:performance": "node tests/performance-regression.test.js",
     "test:filters": "node tests/operational-filters.test.js",
     "test:interactions": "node tests/interactions.test.js",
-    "test:dashboard": "node tests/super-admin-dashboard.test.js && node tests/dashboard-filters.test.js"
+    "test:dashboard": "node tests/super-admin-dashboard.test.js && node tests/dashboard-filters.test.js && node tests/staff-dashboard.test.js",
+    "test:tasks": "node tests/tasks.test.js"
   },
   "dependencies": {
     "next": "^16.3.3",

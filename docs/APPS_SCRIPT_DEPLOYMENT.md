@@ -2,10 +2,10 @@
 
 1. Open the dedicated CRM V2 Google Spreadsheet.
 2. Choose **Extensions → Apps Script**. Use this spreadsheet-bound Apps Script project; do not connect the old CRM project.
-3. Add these repository files to the Apps Script project: `Admin.gs`, `Api.gs`, `Auth.gs`, `Config.gs`, `Directory.gs`, `Followups.gs`, `Import.gs`, `Schema.gs`, `Services.gs`, `Setup.gs`, `Store.gs`, and `Workflow.gs`. In Project Settings, enable **Show "appsscript.json" manifest file in editor**, then replace it with `backend/appsscript.json`.
+3. Add these repository files to the Apps Script project: `Admin.gs`, `Api.gs`, `Auth.gs`, `Config.gs`, `Dashboard.gs`, `Directory.gs`, `Followups.gs`, `Import.gs`, `Interactions.gs`, `Schema.gs`, `Services.gs`, `Setup.gs`, `StaffDashboard.gs`, `Store.gs`, `Tasks.gs`, and `Workflow.gs`. In Project Settings, enable **Show "appsscript.json" manifest file in editor**, then replace it with `backend/appsscript.json`.
 4. Open **Project Settings → Script properties → Add script property**. Set the property name to `SPREADSHEET_ID` and the value to the ID between `/d/` and `/edit` in the spreadsheet URL.
-5. Select `validateSpreadsheetSchema` in the function selector and click **Run**. Approve the requested spreadsheet authorization.
-6. Inspect the execution result. Success is an object with `ok: true`, all 17 names in `okSheets`, and empty arrays for `missingSheets`, `headerMismatches`, `duplicateHeaders`, `missingRequiredColumns`, and `unexpectedColumns`. If it is not successful, fix the spreadsheet manually; do not run an automatic migration.
+5. Select `setupSpreadsheet` in the function selector and click **Run**. It creates only allowed missing sheets/counters and preserves every existing row/header. Approve the requested spreadsheet authorization.
+6. Run `validateSpreadsheetSchema`. Success is an object with `ok: true`, all 18 names in `okSheets`, and empty arrays for `missingSheets`, `headerMismatches`, `duplicateHeaders`, `missingRequiredColumns`, and `unexpectedColumns`.
 7. In the editor only, run `createInitialSuperAdmin('username', 'a password of at least 12 characters', 'Display Name', 'email@example.com')`. Apps Script's function selector cannot supply parameters directly, so temporarily add a local wrapper that calls it, run the wrapper once, then delete the wrapper before deployment. The function refuses to run if an active Super Admin already exists. It returns only the new Staff ID and username; it never logs or returns the password. Confirm the `Staff_List` and `Audit_Log` rows.
 8. Optionally run `addMissingSystemConfigDefaults()`. This inserts only absent supported keys and preserves every existing administrator value.
 9. Choose **Deploy → New deployment**. Select type **Web app**.
@@ -26,6 +26,14 @@ The frontend sends JSON as `text/plain;charset=utf-8`, making the POST a CORS-si
 
 Passwords are never stored in plaintext. They use a unique random salt and an iterated HMAC-SHA-256 derivation. Login returns the same error whether the username is absent, inactive, suspended, or the password is wrong. Only token hashes are stored. Expiry uses the administrator's active `SESSION_HOURS` value or the safe code default when absent.
 
+## Tasks migration for an existing production sheet
+
+1. Replace the changed `.gs` files and create `Tasks.gs` and `StaffDashboard.gs` in the existing Apps Script project.
+2. Run `validateSpreadsheetSchema()`. A pre-migration production spreadsheet should report only `Tasks` as missing; any other problem requires manual review.
+3. Run `setupSpreadsheet()` once. It creates the empty 18-column `Tasks` sheet and appends `Task | TSK | 0 | <timestamp>` only when absent. It does not alter historical sheets or rows.
+4. Run `validateSpreadsheetSchema()` again and require `ok=true`, 18 `okSheets`, and empty problem arrays.
+5. Edit the existing Web App deployment, select **New version**, and deploy without changing access settings. The `/exec` URL remains unchanged.
+
 ## Login timing logs
 
 Successful and failed login executions write structured `login_timing` and `api_timing` entries to the Apps Script execution log. They contain only action name, request ID, success state, and elapsed milliseconds for configuration/rate limiting, staff lookup, password verification, session creation, audit writing, parsing, and total execution. They never include usernames, passwords, password hashes, tokens, or affiliate records. Cold-start time outside script execution may still add latency that these stage timings cannot eliminate.
@@ -43,9 +51,9 @@ Successful and failed login executions write structured `login_timing` and `api_
 ## Affiliate Pool and importer migration
 
 1. Copy the release report's changed backend files, including the new `Import.gs`, into the existing CRM V2 Apps Script project and save.
-2. Run `validateSpreadsheetSchema()`. If the manually created `Affiliate_Pool` has exactly `Affiliate_Username, Full_Name, Email, Phone_Number, Brand`, all 17 sheets should be valid and no setup is needed.
+2. Run `validateSpreadsheetSchema()`. The production contract requires all 18 documented sheets, including `Tasks`.
 3. If and only if `Affiliate_Pool` is missing, run `setupSpreadsheet()` once. It creates the five-column sheet without changing existing sheets or rows.
-4. Run `validateSpreadsheetSchema()` again and require `ok=true`, 17 `okSheets`, and empty problem arrays.
+4. Run `validateSpreadsheetSchema()` again and require `ok=true`, 18 `okSheets`, and empty problem arrays.
 5. Choose **Deploy → Manage deployments**, edit the existing Web App, select **New version**, and deploy with **Execute as: Me** and **Who has access: Anyone** unchanged.
 6. Confirm the `/exec` URL is unchanged. Test validation first, then one small direct import and one pool import.
 

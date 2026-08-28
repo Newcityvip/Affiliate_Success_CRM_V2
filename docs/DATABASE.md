@@ -1,6 +1,6 @@
 # CRM V2 Google Sheets contract
 
-The database contract now contains exactly 17 sheets. `backend/Schema.gs` is the executable contract; the exact headers are repeated here for deployment review.
+The database contract now contains exactly 18 sheets. `backend/Schema.gs` is the executable contract; the exact headers are repeated here for deployment review.
 
 | Sheet | Exact headers, left to right |
 |---|---|
@@ -11,6 +11,7 @@ The database contract now contains exactly 17 sheets. `backend/Schema.gs` is the
 | Brand_List | Brand_ID, Brand_Name, Brand_Code, Market, Default_Language, Status, Sort_Order, Created_At, Updated_At, Created_By, Updated_By |
 | Assignments | Assignment_ID, Affiliate_ID, Staff_ID, Brand_ID, Assignment_Type, Status, Assigned_At, Activated_At, Ended_At, End_Reason, Previous_Assignment_ID, Import_Batch_ID, Assigned_By, Created_At, Updated_At |
 | Work_Items | Work_ID, Affiliate_ID, Assignment_ID, Staff_ID, Work_Type, Work_Channel, Priority, Status, Title, Reason, Generated_By, Assigned_At, Due_At, Started_At, Completed_At, Outcome, Completion_Notes, Next_Action_At, SLA_Minutes, Escalation_Level, Is_Auto_Generated, Parent_Work_ID, Created_At, Updated_At |
+| Tasks | Task_ID, Affiliate_ID, Assignment_ID, Staff_ID, Task_Type, Title, Description, Priority, Status, Due_At, Started_At, Completed_At, Completion_Notes, Created_By, Created_At, Updated_By, Updated_At, Request_ID |
 | Contact_Attempts | Attempt_ID, Affiliate_ID, Assignment_ID, Work_ID, Staff_ID, Attempt_Number, Channel, Contact_Value, Attempt_At, Result, Result_Detail, Connected, Meaningful_Contact, Callback_Required, Callback_At, Notes, Created_At, Created_By |
 | Interactions | Interaction_ID, Affiliate_ID, Assignment_ID, Staff_ID, Work_ID, Channel, Interaction_Type, Outcome, Notes, Interaction_At, Followup_Required, Followup_At, Issue_Created, Growth_Opportunity, Performance_Concern, Created_At, Created_By |
 | Followups | Followup_ID, Affiliate_ID, Assignment_ID, Staff_ID, Source_Interaction_ID, Source_Work_ID, Followup_Type, Priority, Status, Due_At, Reminder_At, Completed_At, Outcome, Notes, Created_At, Updated_At, Created_By |
@@ -26,7 +27,7 @@ The database contract now contains exactly 17 sheets. `backend/Schema.gs` is the
 
 `validateSpreadsheetSchema()` is read-only. It returns `ok`, `okSheets`, `missingSheets`, `headerMismatches`, `duplicateHeaders`, `missingRequiredColumns`, and `unexpectedColumns`. Each mismatch identifies the sheet, expected header, actual header, and one-based column position.
 
-`setupSpreadsheet()` first validates every existing sheet. It may create only missing `Team_List` and `Affiliate_Pool` sheets, and may append only the missing `Team | TEM | 0 | <timestamp>` counter row. Missing legacy sheets, header differences, duplicate Team counters, or a wrong Team prefix cause a clear refusal. It never clears rows, edits existing headers, deletes or reorders sheets, renames columns, or overwrites existing data or counters.
+`setupSpreadsheet()` first validates every existing sheet. It may create only missing `Team_List`, `Affiliate_Pool`, and `Tasks` sheets, and may append only missing `Team | TEM | 0 | <timestamp>` and `Task | TSK | 0 | <timestamp>` counter rows. Missing legacy sheets, header differences, duplicate counters, or wrong prefixes cause a clear refusal. It never clears rows, edits existing headers, deletes or reorders sheets, renames columns, or overwrites existing data or counters.
 
 `Affiliate_Pool` deliberately has only five administrator-facing columns. Import requires a username, a selected active brand, and at least an email or phone. `Brand` stores the stable `Brand_Code`; future same-brand allocation must resolve that code against `Brand_List` under a script lock. Pool availability is represented by presence in this sheet, and this release never creates an active assignment for a pool row.
 

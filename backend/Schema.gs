@@ -7,6 +7,7 @@ var SCHEMA = {
   Brand_List: ['Brand_ID','Brand_Name','Brand_Code','Market','Default_Language','Status','Sort_Order','Created_At','Updated_At','Created_By','Updated_By'],
   Assignments: ['Assignment_ID','Affiliate_ID','Staff_ID','Brand_ID','Assignment_Type','Status','Assigned_At','Activated_At','Ended_At','End_Reason','Previous_Assignment_ID','Import_Batch_ID','Assigned_By','Created_At','Updated_At'],
   Work_Items: ['Work_ID','Affiliate_ID','Assignment_ID','Staff_ID','Work_Type','Work_Channel','Priority','Status','Title','Reason','Generated_By','Assigned_At','Due_At','Started_At','Completed_At','Outcome','Completion_Notes','Next_Action_At','SLA_Minutes','Escalation_Level','Is_Auto_Generated','Parent_Work_ID','Created_At','Updated_At'],
+  Tasks: ['Task_ID','Affiliate_ID','Assignment_ID','Staff_ID','Task_Type','Title','Description','Priority','Status','Due_At','Started_At','Completed_At','Completion_Notes','Created_By','Created_At','Updated_By','Updated_At','Request_ID'],
   Contact_Attempts: ['Attempt_ID','Affiliate_ID','Assignment_ID','Work_ID','Staff_ID','Attempt_Number','Channel','Contact_Value','Attempt_At','Result','Result_Detail','Connected','Meaningful_Contact','Callback_Required','Callback_At','Notes','Created_At','Created_By'],
   Interactions: ['Interaction_ID','Affiliate_ID','Assignment_ID','Staff_ID','Work_ID','Channel','Interaction_Type','Outcome','Notes','Interaction_At','Followup_Required','Followup_At','Issue_Created','Growth_Opportunity','Performance_Concern','Created_At','Created_By'],
   Followups: ['Followup_ID','Affiliate_ID','Assignment_ID','Staff_ID','Source_Interaction_ID','Source_Work_ID','Followup_Type','Priority','Status','Due_At','Reminder_At','Completed_At','Outcome','Notes','Created_At','Updated_At','Created_By'],
@@ -21,8 +22,9 @@ var SCHEMA = {
 
 var ID_DEFINITIONS = {
   Affiliate:'AFF', Staff:'STF', Team:'TEM', Brand:'BRD', Assignment:'ASN', Work:'WRK', Attempt:'ATM',
-  Interaction:'INT', Followup:'FUP', Issue:'ISS', Performance:'PRF', Import:'IMP', Audit:'AUD', Session:'SES'
+  Interaction:'INT', Followup:'FUP', Task:'TSK', Issue:'ISS', Performance:'PRF', Import:'IMP', Audit:'AUD', Session:'SES'
 };
-var ID_SOURCES = {Affiliate:['Affiliates','Affiliate_ID'],Staff:['Staff_List','Staff_ID'],Team:['Team_List','Team_ID'],Brand:['Brand_List','Brand_ID'],Assignment:['Assignments','Assignment_ID'],Work:['Work_Items','Work_ID'],Attempt:['Contact_Attempts','Attempt_ID'],Interaction:['Interactions','Interaction_ID'],Followup:['Followups','Followup_ID'],Issue:['Issues','Issue_ID'],Performance:['Monthly_Performance','Performance_ID'],Import:['Import_Batches','Import_Batch_ID'],Audit:['Audit_Log','Audit_ID'],Session:['Sessions','Session_ID']};
+var ID_SOURCES = {Affiliate:['Affiliates','Affiliate_ID'],Staff:['Staff_List','Staff_ID'],Team:['Team_List','Team_ID'],Brand:['Brand_List','Brand_ID'],Assignment:['Assignments','Assignment_ID'],Work:['Work_Items','Work_ID'],Attempt:['Contact_Attempts','Attempt_ID'],Interaction:['Interactions','Interaction_ID'],Followup:['Followups','Followup_ID'],Task:['Tasks','Task_ID'],Issue:['Issues','Issue_ID'],Performance:['Monthly_Performance','Performance_ID'],Import:['Import_Batches','Import_Batch_ID'],Audit:['Audit_Log','Audit_ID'],Session:['Sessions','Session_ID']};
 var ROLES = ['STAFF','SUPERVISOR','ADMIN','SUPER_ADMIN'];
 var WORK_STATUSES = ['PENDING','IN_PROGRESS','COMPLETED','SKIPPED','CANCELLED','OVERDUE'];
+var TASK_STATUSES = ['PENDING','IN_PROGRESS','COMPLETED','CANCELLED'];
