@@ -11,7 +11,9 @@
     "test:workflow": "node tests/first-contact-workflow.test.js",
     "test:affiliates": "node tests/affiliate-directory.test.js && node tests/affiliate-filters.test.js",
     "test:followups": "node tests/followups.test.js && node tests/callback-workflow.test.js",
-    "test:performance": "node tests/performance-regression.test.js"
+    "test:performance": "node tests/performance-regression.test.js",
+    "test:filters": "node tests/operational-filters.test.js",
+    "test:interactions": "node tests/interactions.test.js"
   },
   "dependencies": {
     "next": "^16.3.3",

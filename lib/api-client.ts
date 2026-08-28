@@ -18,6 +18,8 @@ export type AffiliateActivity = { id:string;type:string;timestamp:string;status:
 export type AffiliateDetailResponse = { profile:AffiliateDirectoryItem;recentActivity:AffiliateActivity[] };
 export type FollowupItem = { followupId:string;affiliateId:string;assignmentId:string;staffId:string;affiliateUsername:string;affiliateName:string;brandId:string;brandName:string;brandCode:string;followupType:string;channel:string;status:string;dueAt:string;priority:string;title:string;reason:string;notes:string;sourceWorkId:string;linkedWorkId:string;email:string;phone:string;telegramUsername:string;telegramStatus:string;overdue:boolean;dueToday:boolean;upcoming:boolean };
 export type FollowupsResponse = { items:FollowupItem[];page:number;pageSize:number;total:number;summary:{open:number;overdue:number;dueToday:number;upcoming:number} };
+export type InteractionItem = {id:string;affiliateId:string;affiliateUsername:string;affiliateName:string;brandName:string;brandCode:string;type:string;channel:string;outcome:string;timestamp:string;staffName:string;notes:string;summary:string;followupRequired:boolean};
+export type InteractionsResponse = {items:InteractionItem[];page:number;pageSize:number;total:number};
 
 export class ApiError extends Error { constructor(message: string, public code = 'API_ERROR') { super(message); } }
 type ApiEnvelope<T> = { ok: boolean; data?: T; error?: { code: string; message: string } };
@@ -59,6 +61,7 @@ class ApiClient {
   commitAffiliateImport(payload: Record<string, unknown>) { return this.call<ImportCommitResult>('commitAffiliateImport', payload); }
   getMyWork(page = 1, pageSize = 100) { return this.call<MyWorkResponse>('getMyWork', { page, pageSize }); }
   getMyFollowups(page = 1, pageSize = 200) { return this.call<FollowupsResponse>('getMyFollowups', {page,pageSize}); }
+  getMyInteractions(page = 1, pageSize = 500) { return this.call<InteractionsResponse>('getMyInteractions', {page,pageSize}); }
   listAffiliates(page = 1, pageSize = 500) { return this.call<AffiliateDirectoryResponse>('listAffiliates', {page,pageSize}); }
   getAffiliateDetail(affiliateId:string) { return this.call<AffiliateDetailResponse>('getAffiliateDetail', {affiliateId}); }
   getWorkWorkspace(workId:string) { return this.call<WorkWorkspace>('getWorkWorkspace', {workId}); }
