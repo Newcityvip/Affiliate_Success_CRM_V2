@@ -7,6 +7,8 @@ export type BrandRecord = { brandId:string; brandName:string; brandCode:string; 
 export type ImportInputRow = { username:string; fullName:string; email:string; phone:string };
 export type ImportValidation = { configuration:{brandId:string;brandName:string;brandCode:string;destination:'STAFF'|'POOL';staffId:string;staffName:string;mode:'NEW_PROSPECTS'};summary:{totalRows:number;validRows:number;invalidRows:number;existingAffiliates:number;duplicateRows:number;duplicateUsernames:number;duplicateEmails:number;duplicatePhones:number;missingContact:number;invalidContactFormat:number;existingActiveAssignment:number;archivedMatches:number};rows:Array<ImportInputRow&{row:number;status:'VALID'|'INVALID';reasons:string[]}>;limit:number };
 export type ImportCommitResult = { importBatchId:string; importedAffiliates:number; assignmentsCreated:number; workItemsCreated:number; poolRowsAdded:number; skippedRows:number; invalidRows:number };
+export type MyWorkItem = { workId:string;affiliateId:string;assignmentId:string;workType:string;workChannel:string;priority:string;status:string;title:string;reason:string;assignedAt:string;dueAt:string;startedAt:string;overdue:boolean;affiliateUsername:string;affiliateName:string;email:string;phone:string;brandId:string;brandName:string;brandCode:string;lifecycleStatus:string;prospectStatus:string;telegramStatus:string };
+export type MyWorkResponse = { items:MyWorkItem[];page:number;pageSize:number;total:number };
 
 export class ApiError extends Error { constructor(message: string, public code = 'API_ERROR') { super(message); } }
 type ApiEnvelope<T> = { ok: boolean; data?: T; error?: { code: string; message: string } };
@@ -46,7 +48,7 @@ class ApiClient {
   updateBrand(payload: Record<string, unknown>) { return this.call<BrandRecord>('updateBrand', payload); }
   validateAffiliateImport(payload: Record<string, unknown>) { return this.call<ImportValidation>('validateAffiliateImport', payload); }
   commitAffiliateImport(payload: Record<string, unknown>) { return this.call<ImportCommitResult>('commitAffiliateImport', payload); }
-  getMyWork(page = 1, pageSize = 50) { return this.call<unknown>('getMyWork', { page, pageSize }); }
+  getMyWork(page = 1, pageSize = 100) { return this.call<MyWorkResponse>('getMyWork', { page, pageSize }); }
   getAffiliate(affiliateId: string) { return this.call<unknown>('getAffiliate', { affiliateId }); }
   invoke<T>(action: string, payload: Record<string, unknown>) { return this.call<T>(action, payload); }
 }

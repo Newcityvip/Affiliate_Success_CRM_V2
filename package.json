@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next dev",
-    "test:import": "node tests/import-engine.test.js"
+    "test:import": "node tests/import-engine.test.js",
+    "test:my-work": "node tests/my-work.test.js && node tests/my-work-auth.test.js"
   },
   "dependencies": {
     "next": "^16.3.3",
