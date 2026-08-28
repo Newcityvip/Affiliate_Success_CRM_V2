@@ -2,11 +2,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { api, ApiError, MyWorkItem } from '../../lib/api-client';
+import {clearReadCache,readCache,writeCache} from '../../lib/read-cache';
 import styles from './my-work.module.css';
 
 export default function MyWorkPage(){
-  const [items,setItems]=useState<MyWorkItem[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState('');
-  const load=useCallback(async()=>{setLoading(true);setError('');try{const response=await api.getMyWork();setItems(response.items)}catch(cause){setError(cause instanceof ApiError?cause.message:'Your work queue could not be loaded.')}finally{setLoading(false)}},[]);useEffect(()=>{void load()},[load]);
+  const [initial]=useState(()=>readCache<{items:MyWorkItem[]}>('my-work')),[items,setItems]=useState<MyWorkItem[]>(initial?.items||[]),[loading,setLoading]=useState(!initial),[error,setError]=useState('');
+  const load=useCallback(async()=>{setError('');try{const response=await api.getMyWork();setItems(response.items);writeCache('my-work',response)}catch(cause){const auth=cause instanceof ApiError&&['UNAUTHENTICATED','SESSION_EXPIRED','FORBIDDEN'].includes(cause.code);if(!initial||auth){if(auth){clearReadCache();setItems([])}setError(cause instanceof ApiError?cause.message:'Your work queue could not be loaded.')}}finally{setLoading(false)}},[initial]);useEffect(()=>{void load()},[load]);
   const summary=useMemo(()=>{const current=new Date();return {open:items.length,overdue:items.filter(x=>x.overdue).length,dueToday:items.filter(x=>isToday_(x.dueAt,current)).length,high:items.filter(x=>String(x.priority).toUpperCase()==='HIGH').length}},[items]);
   return <><div className="section-head"><div><h1>My Work</h1><p className="muted">Your live assigned queue, ordered by urgency and due time.</p></div>{!loading&&<button className={styles.refresh} onClick={()=>void load()}>Refresh</button>}</div>
     <div className={styles.summary}>{[['Open Work',summary.open],['Overdue',summary.overdue],['Due Today',summary.dueToday],['High Priority',summary.high]].map(([label,value])=><section className="card" key={label}><span>{label}</span><b>{value}</b></section>)}</div>

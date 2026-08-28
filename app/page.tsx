@@ -3,6 +3,7 @@
 import { FormEvent, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api-client';
+import { clearReadCache } from '@/lib/read-cache';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,6 +19,7 @@ export default function LoginPage() {
     const data = new FormData(event.currentTarget);
     try {
       const session = await api.login(String(data.get('username')), String(data.get('password')));
+      clearReadCache();
       localStorage.setItem('crm_session_token', session.token);
       localStorage.setItem('crm_user', JSON.stringify(session.user));
       router.replace('/dashboard');

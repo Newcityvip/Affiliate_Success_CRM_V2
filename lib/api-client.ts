@@ -10,6 +10,7 @@ export type ImportCommitResult = { importBatchId:string; importedAffiliates:numb
 export type MyWorkItem = { workId:string;affiliateId:string;assignmentId:string;workType:string;workChannel:string;priority:string;status:string;title:string;reason:string;assignedAt:string;dueAt:string;startedAt:string;overdue:boolean;affiliateUsername:string;affiliateName:string;email:string;phone:string;brandId:string;brandName:string;brandCode:string;lifecycleStatus:string;prospectStatus:string;telegramStatus:string };
 export type MyWorkResponse = { items:MyWorkItem[];page:number;pageSize:number;total:number };
 export type WorkWorkspace = { work:{workId:string;affiliateId:string;assignmentId:string;workType:string;workChannel:string;priority:string;status:string;title:string;reason:string;assignedAt:string;dueAt:string;startedAt:string};affiliate:{affiliateUsername:string;affiliateName:string;email:string;phone:string;telegramUsername:string;preferredChannel:string;lifecycleStatus:string;prospectStatus:string;telegramStatus:string};brand:{brandId:string;brandName:string;brandCode:string};assignment:{staffId:string;staffName:string;status:string} };
+export type WorkWorkspaceBootstrap = {workspace:WorkWorkspace;detail:AffiliateDetailResponse};
 export type FirstContactResult = { workId:string;affiliateId:string;assignmentId:string;outcome:string;attemptId:string;interactionId:string;nextWorkId:string;followupId:string;completedAt:string };
 export type AffiliateDirectoryItem = { affiliateId:string;affiliateUsername:string;affiliateName:string;email:string;phone:string;telegramUsername:string;preferredChannel:string;brandId:string;brandName:string;brandCode:string;lifecycleStatus:string;prospectStatus:string;telegramStatus:string;priority:string;archiveStatus:string;assignedStaffId:string;assignedStaffName:string;assignmentId:string;lastContactAt:string;lastMeaningfulContactAt:string;activeWorkCount:number;currentWorkId:string;currentWorkType:string;currentWorkDueAt:string };
 export type AffiliateDirectoryResponse = { items:AffiliateDirectoryItem[];page:number;pageSize:number;total:number;summary:{totalAffiliates:number;telegramConnected:number;activeProspects:number;activeWork:number} };
@@ -61,6 +62,7 @@ class ApiClient {
   listAffiliates(page = 1, pageSize = 500) { return this.call<AffiliateDirectoryResponse>('listAffiliates', {page,pageSize}); }
   getAffiliateDetail(affiliateId:string) { return this.call<AffiliateDetailResponse>('getAffiliateDetail', {affiliateId}); }
   getWorkWorkspace(workId:string) { return this.call<WorkWorkspace>('getWorkWorkspace', {workId}); }
+  getWorkWorkspaceBootstrap(workId:string) { return this.call<WorkWorkspaceBootstrap>('getWorkWorkspaceBootstrap', {workId}); }
   submitFirstContactOutcome(payload:Record<string,unknown>) { return this.call<FirstContactResult>('submitFirstContactOutcome', payload); }
   submitCallbackOutcome(payload:Record<string,unknown>) { return this.call<FirstContactResult>('submitCallbackOutcome', payload); }
   getAffiliate(affiliateId: string) { return this.call<unknown>('getAffiliate', { affiliateId }); }

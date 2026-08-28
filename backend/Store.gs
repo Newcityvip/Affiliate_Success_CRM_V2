@@ -1,16 +1,17 @@
 var REQUEST_CONTEXT=null;
-function beginRequest_(){REQUEST_CONTEXT={spreadsheet:null,sheets:{},rows:{}}}
+function beginRequest_(){REQUEST_CONTEXT={spreadsheet:null,sheets:{},rows:{},metrics:{authMs:0,spreadsheetOpenMs:0,sheetReadMs:0,sheetReads:0,rowsRead:0}}}
 function context_(){if(!REQUEST_CONTEXT)beginRequest_();return REQUEST_CONTEXT}
+function requestMetrics_(){return context_().metrics}
 function spreadsheet_() {
   var ctx=context_();if(ctx.spreadsheet)return ctx.spreadsheet;
   var id=PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
   if(!id)throw apiError_('CONFIG_ERROR','Service configuration is incomplete.','SPREADSHEET_ID is not configured.');
-  ctx.spreadsheet=SpreadsheetApp.openById(id);return ctx.spreadsheet;
+  var started=Date.now();ctx.spreadsheet=SpreadsheetApp.openById(id);ctx.metrics.spreadsheetOpenMs+=Date.now()-started;return ctx.spreadsheet;
 }
 function sheet_(name){if(!SCHEMA[name])throw new Error('Unknown schema name: '+name);var ctx=context_();if(ctx.sheets[name])return ctx.sheets[name];var s=spreadsheet_().getSheetByName(name);if(!s)throw apiError_('SCHEMA_ERROR','Service configuration is incomplete.','Missing sheet: '+name);ctx.sheets[name]=s;return s}
 function rows_(name){
   var ctx=context_();if(ctx.rows[name])return ctx.rows[name];var s=sheet_(name),headers=SCHEMA[name],last=s.getLastRow();if(last<2)return ctx.rows[name]=[];
-  var values=s.getRange(2,1,last-1,headers.length).getValues();return ctx.rows[name]=values.map(function(row){var o={};headers.forEach(function(h,i){o[h]=row[i]});return o});
+  var started=Date.now(),values=s.getRange(2,1,last-1,headers.length).getValues();ctx.metrics.sheetReadMs+=Date.now()-started;ctx.metrics.sheetReads++;ctx.metrics.rowsRead+=values.length;return ctx.rows[name]=values.map(function(row){var o={};headers.forEach(function(h,i){o[h]=row[i]});return o});
 }
 function findRowRecord_(name,column,value,caseSensitive){var headers=SCHEMA[name],columnIndex=headers.indexOf(column);if(columnIndex<0)throw new Error('Unknown lookup column '+column+' for '+name);var s=sheet_(name),match=s.getRange(2,columnIndex+1,Math.max(s.getLastRow()-1,1),1).createTextFinder(String(value)).matchEntireCell(true).matchCase(caseSensitive!==false).findNext();if(!match)return null;var row=s.getRange(match.getRow(),1,1,headers.length).getValues()[0],object={};headers.forEach(function(h,i){object[h]=row[i]});return {rowNumber:match.getRow(),value:object}}
 function findRow_(name,column,value,caseSensitive){var found=findRowRecord_(name,column,value,caseSensitive);return found&&found.value}
