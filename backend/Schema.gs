@@ -1,6 +1,7 @@
 /** Exact contract of the already-created CRM V2 spreadsheet. */
 var SCHEMA = {
   Affiliates: ['Affiliate_ID','Affiliate_Username','Email','Phone','Brand_ID','Market','Country','Language','Affiliate_Name','Preferred_Channel','Telegram_Username','Telegram_Status','Lifecycle_Status','Health_Status','Priority','Prospect_Status','Archive_Status','Archive_Reason','First_Added_At','Last_Contact_At','Last_Meaningful_Contact_At','Telegram_Connected_At','Archived_At','Created_At','Updated_At','Created_By','Updated_By'],
+  Affiliate_Pool: ['Affiliate_Username','Full_Name','Email','Phone_Number','Brand'],
   Staff_List: ['Staff_ID','Username','Password_Hash','Display_Name','Email','Role','Team','Status','Prospect_Target','Max_Managed_Affiliates','Last_Login_At','Password_Changed_At','Created_At','Updated_At','Created_By','Updated_By'],
   Team_List: ['Team_ID','Team_Name','Team_Code','Status','Default_Prospect_Target','Default_Max_Managed_Affiliates','Created_At','Updated_At','Created_By','Updated_By'],
   Brand_List: ['Brand_ID','Brand_Name','Brand_Code','Market','Default_Language','Status','Sort_Order','Created_At','Updated_At','Created_By','Updated_By'],

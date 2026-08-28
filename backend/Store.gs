@@ -24,6 +24,14 @@ function nextIdUnlocked_(entity){
   if(matches.length===1){var rowIndex=matches[0];if(String(values[rowIndex][1])!==prefix)throw new Error('Counter prefix mismatch for '+entity+': expected '+prefix);var current=Number(values[rowIndex][2]);if(!isFinite(current)||current<0||Math.floor(current)!==current)throw new Error('Invalid counter for '+entity);var next=current+1;s.getRange(rowIndex+2,1,1,4).setValues([[entity,prefix,next,now_()]]);return prefix+String(next).padStart(6,'0')}
   var source=ID_SOURCES[entity],highest=0;rows_(source[0]).forEach(function(r){var match=String(r[source[1]]||'').match(new RegExp('^'+prefix+'(\\d{6,})$'));if(match)highest=Math.max(highest,Number(match[1]))});var first=highest+1;s.getRange(s.getLastRow()+1,1,1,4).setValues([[entity,prefix,first,now_()]]);return prefix+String(first).padStart(6,'0');
 }
+function reserveIdsUnlocked_(entity,count){
+  count=Number(count);if(!isFinite(count)||count<0||Math.floor(count)!==count)throw new Error('Invalid ID reservation count.');if(!count)return [];
+  var prefix=ID_DEFINITIONS[entity];if(!prefix)throw new Error('Unknown ID entity: '+entity);var s=sheet_('ID_Counters'),last=s.getLastRow(),values=last>1?s.getRange(2,1,last-1,SCHEMA.ID_Counters.length).getValues():[],matches=[];
+  for(var i=0;i<values.length;i++)if(String(values[i][0])===entity)matches.push(i);if(matches.length>1)throw new Error('Duplicate ID counter rows for '+entity);var current=0,rowNumber;
+  if(matches.length===1){var rowIndex=matches[0];if(String(values[rowIndex][1])!==prefix)throw new Error('Counter prefix mismatch for '+entity+': expected '+prefix);current=Number(values[rowIndex][2]);if(!isFinite(current)||current<0||Math.floor(current)!==current)throw new Error('Invalid counter for '+entity);rowNumber=rowIndex+2}
+  else{var source=ID_SOURCES[entity];rows_(source[0]).forEach(function(r){var match=String(r[source[1]]||'').match(new RegExp('^'+prefix+'(\\d{6,})$'));if(match)current=Math.max(current,Number(match[1]))});rowNumber=s.getLastRow()+1}
+  var end=current+count;s.getRange(rowNumber,1,1,4).setValues([[entity,prefix,end,now_()]]);var ids=[];for(i=current+1;i<=end;i++)ids.push(prefix+String(i).padStart(6,'0'));return ids;
+}
 function now_(){return new Date().toISOString()}
 function cacheRows_(name,seconds){var c=CacheService.getScriptCache(),key='rows:'+name,cached=c.get(key);if(cached)return JSON.parse(cached);var data=rows_(name);c.put(key,JSON.stringify(data),seconds||300);return data}
 function clearCache_(name){var ctx=context_();delete ctx.rows[name];CacheService.getScriptCache().remove('rows:'+name)}

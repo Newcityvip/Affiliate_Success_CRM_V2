@@ -1,4 +1,4 @@
-/** Read-only validation of all 16 required sheets. */
+/** Read-only validation of all 17 required sheets. */
 function validateSpreadsheetSchema(){
   beginRequest_();var ss=spreadsheet_(),result={ok:true,okSheets:[],missingSheets:[],headerMismatches:[],duplicateHeaders:[],missingRequiredColumns:[],unexpectedColumns:[]};
   Object.keys(SCHEMA).forEach(function(name){
@@ -15,8 +15,8 @@ function validateSpreadsheetSchema(){
 /** Creates only missing sheets. Existing sheets and data are never modified. */
 function setupSpreadsheet(){
   var before=validateSpreadsheetSchema();if(before.headerMismatches.length||before.duplicateHeaders.length||before.missingRequiredColumns.length||before.unexpectedColumns.length)throw new Error(schemaErrorMessage_(before));
-  var unsupported=before.missingSheets.filter(function(name){return name!=='Team_List'});if(unsupported.length)throw new Error('Setup refused: only Team_List may be created. Missing existing sheets: '+unsupported.join(', '));validateTeamCounter_();
-  var ss=spreadsheet_(),created=[];if(before.missingSheets.indexOf('Team_List')>=0){var s=ss.insertSheet('Team_List'),headers=SCHEMA.Team_List;s.getRange(1,1,1,headers.length).setValues([headers]);s.setFrozenRows(1);created.push('Team_List')}
+  var allowed={Team_List:true,Affiliate_Pool:true},unsupported=before.missingSheets.filter(function(name){return !allowed[name]});if(unsupported.length)throw new Error('Setup refused: only Team_List and Affiliate_Pool may be created. Missing existing sheets: '+unsupported.join(', '));validateTeamCounter_();
+  var ss=spreadsheet_(),created=[];before.missingSheets.forEach(function(name){var s=ss.insertSheet(name),headers=SCHEMA[name];s.getRange(1,1,1,headers.length).setValues([headers]);s.setFrozenRows(1);created.push(name)});
   ensureTeamCounter_();
   var after=validateSpreadsheetSchema();if(!after.ok)throw new Error(schemaErrorMessage_(after));return {ok:true,createdSheets:created,untouchedSheets:after.okSheets.filter(function(name){return created.indexOf(name)<0})};
 }

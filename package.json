@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next dev"
+    "start": "next dev",
+    "test:import": "node tests/import-engine.test.js"
   },
   "dependencies": {
     "next": "^16.3.3",

@@ -22,7 +22,7 @@ export default function AdminPage(){
     {tab==='staff'&&<StaffSection records={staff} teams={teams} canManage={root} busy={busy} onCreate={()=>setEditor({kind:'staff'})} onEdit={(record)=>setEditor({kind:'staff',record})} onPassword={(record)=>setEditor({kind:'password',record})} onStatus={(record,status)=>void mutate(()=>api.setStaffStatus(record.staffId,status),`${record.displayName||record.username} is now ${status.toLowerCase()}.`)}/>}
     {tab==='teams'&&<TeamSection records={teams} canManage={root} onCreate={()=>setEditor({kind:'team'})} onEdit={(record)=>setEditor({kind:'team',record})}/>}
     {tab==='brands'&&<BrandSection records={brands} onCreate={()=>setEditor({kind:'brand'})} onEdit={(record)=>setEditor({kind:'brand',record})}/>}
-    {tab==='import'&&<section className="card empty-state"><div><div className="empty-icon">⇧</div><h2>Bulk Affiliate Import</h2><p className="muted">The existing importer entry point is preserved. The full import workflow belongs to the next feature phase.</p><Link className="primary" href="/admin/import">Open importer →</Link></div></section>}
+    {tab==='import'&&<section className="card empty-state"><div><div className="empty-icon">⇧</div><h2>Bulk Affiliate Import</h2><p className="muted">Validate pasted prospects, then assign them directly to active staff or add them to the unassigned pool.</p><Link className="primary" href="/admin/import">Open importer →</Link></div></section>}
     {editor&&<EditorModal editor={editor} teams={teams} busy={busy} onClose={()=>!busy&&setEditor(null)} onSubmit={(event)=>void submitEditor_(event,editor,mutate)}/>}
   </>;
 }

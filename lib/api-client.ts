@@ -4,6 +4,9 @@ export type LoginResponse = { token: string; expiresAt: string; user: CurrentUse
 export type StaffRecord = CurrentUser & { status: 'ACTIVE'|'INACTIVE'|'SUSPENDED'; prospectTarget: number; maxManagedAffiliates: number; createdAt: string; updatedAt: string; lastLoginAt: string; passwordChangedAt: string };
 export type TeamRecord = { teamId:string; teamName:string; teamCode:string; status:'ACTIVE'|'INACTIVE'; defaultProspectTarget:number; defaultMaxManagedAffiliates:number; createdAt:string; updatedAt:string };
 export type BrandRecord = { brandId:string; brandName:string; brandCode:string; market:string; defaultLanguage:string; status:'ACTIVE'|'INACTIVE'; sortOrder:number; createdAt:string; updatedAt:string };
+export type ImportInputRow = { username:string; fullName:string; email:string; phone:string };
+export type ImportValidation = { configuration:{brandId:string;brandName:string;brandCode:string;destination:'STAFF'|'POOL';staffId:string;staffName:string;mode:'NEW_PROSPECTS'};summary:{totalRows:number;validRows:number;invalidRows:number;existingAffiliates:number;duplicateRows:number;duplicateUsernames:number;duplicateEmails:number;duplicatePhones:number;missingContact:number;invalidContactFormat:number;existingActiveAssignment:number;archivedMatches:number};rows:Array<ImportInputRow&{row:number;status:'VALID'|'INVALID';reasons:string[]}>;limit:number };
+export type ImportCommitResult = { importBatchId:string; importedAffiliates:number; assignmentsCreated:number; workItemsCreated:number; poolRowsAdded:number; skippedRows:number; invalidRows:number };
 
 export class ApiError extends Error { constructor(message: string, public code = 'API_ERROR') { super(message); } }
 type ApiEnvelope<T> = { ok: boolean; data?: T; error?: { code: string; message: string } };
@@ -41,6 +44,8 @@ class ApiClient {
   listBrands() { return this.call<BrandRecord[]>('listBrands'); }
   createBrand(payload: Record<string, unknown>) { return this.call<BrandRecord>('createBrand', payload); }
   updateBrand(payload: Record<string, unknown>) { return this.call<BrandRecord>('updateBrand', payload); }
+  validateAffiliateImport(payload: Record<string, unknown>) { return this.call<ImportValidation>('validateAffiliateImport', payload); }
+  commitAffiliateImport(payload: Record<string, unknown>) { return this.call<ImportCommitResult>('commitAffiliateImport', payload); }
   getMyWork(page = 1, pageSize = 50) { return this.call<unknown>('getMyWork', { page, pageSize }); }
   getAffiliate(affiliateId: string) { return this.call<unknown>('getAffiliate', { affiliateId }); }
   invoke<T>(action: string, payload: Record<string, unknown>) { return this.call<T>(action, payload); }

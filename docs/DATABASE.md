@@ -1,10 +1,11 @@
 # CRM V2 Google Sheets contract
 
-The database contract now contains exactly 16 sheets. `backend/Schema.gs` is the executable contract; the exact headers are repeated here for deployment review.
+The database contract now contains exactly 17 sheets. `backend/Schema.gs` is the executable contract; the exact headers are repeated here for deployment review.
 
 | Sheet | Exact headers, left to right |
 |---|---|
 | Affiliates | Affiliate_ID, Affiliate_Username, Email, Phone, Brand_ID, Market, Country, Language, Affiliate_Name, Preferred_Channel, Telegram_Username, Telegram_Status, Lifecycle_Status, Health_Status, Priority, Prospect_Status, Archive_Status, Archive_Reason, First_Added_At, Last_Contact_At, Last_Meaningful_Contact_At, Telegram_Connected_At, Archived_At, Created_At, Updated_At, Created_By, Updated_By |
+| Affiliate_Pool | Affiliate_Username, Full_Name, Email, Phone_Number, Brand |
 | Staff_List | Staff_ID, Username, Password_Hash, Display_Name, Email, Role, Team, Status, Prospect_Target, Max_Managed_Affiliates, Last_Login_At, Password_Changed_At, Created_At, Updated_At, Created_By, Updated_By |
 | Team_List | Team_ID, Team_Name, Team_Code, Status, Default_Prospect_Target, Default_Max_Managed_Affiliates, Created_At, Updated_At, Created_By, Updated_By |
 | Brand_List | Brand_ID, Brand_Name, Brand_Code, Market, Default_Language, Status, Sort_Order, Created_At, Updated_At, Created_By, Updated_By |
@@ -25,7 +26,9 @@ The database contract now contains exactly 16 sheets. `backend/Schema.gs` is the
 
 `validateSpreadsheetSchema()` is read-only. It returns `ok`, `okSheets`, `missingSheets`, `headerMismatches`, `duplicateHeaders`, `missingRequiredColumns`, and `unexpectedColumns`. Each mismatch identifies the sheet, expected header, actual header, and one-based column position.
 
-`setupSpreadsheet()` first validates every existing sheet. For this migration it may create only the missing `Team_List` sheet and may append only the missing `Team | TEM | 0 | <timestamp>` counter row. Missing legacy sheets, header differences, duplicate Team counters, or a wrong Team prefix cause a clear refusal. It never clears rows, edits existing headers, deletes or reorders sheets, renames columns, or overwrites existing data or counters.
+`setupSpreadsheet()` first validates every existing sheet. It may create only missing `Team_List` and `Affiliate_Pool` sheets, and may append only the missing `Team | TEM | 0 | <timestamp>` counter row. Missing legacy sheets, header differences, duplicate Team counters, or a wrong Team prefix cause a clear refusal. It never clears rows, edits existing headers, deletes or reorders sheets, renames columns, or overwrites existing data or counters.
+
+`Affiliate_Pool` deliberately has only five administrator-facing columns. Import requires a username, a selected active brand, and at least an email or phone. `Brand` stores the stable `Brand_Code`; future same-brand allocation must resolve that code against `Brand_List` under a script lock. Pool availability is represented by presence in this sheet, and this release never creates an active assignment for a pool row.
 
 ## Stable IDs
 
