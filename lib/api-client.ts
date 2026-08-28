@@ -1,3 +1,5 @@
+import {invalidateReadCache} from './read-cache';
+
 export type Role = 'STAFF' | 'SUPERVISOR' | 'ADMIN' | 'SUPER_ADMIN';
 export type CurrentUser = { staffId: string; username: string; displayName: string; email: string; role: Role; team: string };
 export type LoginResponse = { token: string; expiresAt: string; user: CurrentUser };
@@ -20,6 +22,10 @@ export type FollowupItem = { followupId:string;affiliateId:string;assignmentId:s
 export type FollowupsResponse = { items:FollowupItem[];page:number;pageSize:number;total:number;summary:{open:number;overdue:number;dueToday:number;upcoming:number} };
 export type InteractionItem = {id:string;affiliateId:string;affiliateUsername:string;affiliateName:string;brandName:string;brandCode:string;type:string;channel:string;outcome:string;timestamp:string;staffName:string;notes:string;summary:string;followupRequired:boolean};
 export type InteractionsResponse = {items:InteractionItem[];page:number;pageSize:number;total:number};
+export type DashboardStaff={staffId:string;displayName:string;username:string;team:string;activeAffiliates:number;openWork:number;overdueWork:number;contactsToday:number;interactions30d:number;connectedAffiliates:number;telegramConnected:number;openFollowups:number;overdueFollowups:number;connectionRate:number};
+export type DashboardAffiliate={affiliateId:string;affiliateUsername:string;affiliateName:string;brandName:string;brandCode:string;staffId:string;staffName:string;lifecycleStatus:string;prospectStatus:string;telegramStatus:string;priority:string;pipelineStage:string;currentWorkId:string;currentWorkType:string;workDueAt:string;nextFollowupAt:string;lastInteractionAt:string;lastOutcome:string;needsAttention:boolean};
+export type DashboardAttention={id:string;type:string;reason:string;affiliateId:string;affiliateUsername:string;staffName:string;dueAt:string};
+export type SuperAdminDashboard={generatedAt:string;kpis:{activeAffiliates:number;activeProspects:number;connectedAffiliates:number;telegramConnected:number;openWork:number;overdueWork:number;followupsDueToday:number;overdueFollowups:number;contactsToday:number;connectionRate:number};pipeline:Record<string,number>;staff:DashboardStaff[];affiliates:DashboardAffiliate[];affiliateTotal:number;needsAttention:DashboardAttention[]};
 
 export class ApiError extends Error { constructor(message: string, public code = 'API_ERROR') { super(message); } }
 type ApiEnvelope<T> = { ok: boolean; data?: T; error?: { code: string; message: string } };
@@ -47,21 +53,22 @@ class ApiClient {
   validateSession() { return this.call<{ valid: boolean }>('validateSession'); }
   currentUser() { return this.call<CurrentUser>('currentUser'); }
   listStaff() { return this.call<StaffRecord[]>('listStaff'); }
-  createStaff(payload: Record<string, unknown>) { return this.call<StaffRecord>('createStaff', payload); }
-  updateStaff(payload: Record<string, unknown>) { return this.call<StaffRecord>('updateStaff', payload); }
-  setStaffStatus(staffId:string,status:StaffRecord['status']) { return this.call<StaffRecord>('setStaffStatus', {staffId,status}); }
+  createStaff(payload: Record<string, unknown>) { return this.call<StaffRecord>('createStaff', payload).then(result=>{invalidateReadCache('super-admin-dashboard');return result}); }
+  updateStaff(payload: Record<string, unknown>) { return this.call<StaffRecord>('updateStaff', payload).then(result=>{invalidateReadCache('super-admin-dashboard');return result}); }
+  setStaffStatus(staffId:string,status:StaffRecord['status']) { return this.call<StaffRecord>('setStaffStatus', {staffId,status}).then(result=>{invalidateReadCache('super-admin-dashboard');return result}); }
   resetStaffPassword(staffId:string,newPassword:string) { return this.call<{staffId:string;sessionsRevoked:number}>('resetStaffPassword', {staffId,newPassword}); }
   listTeams() { return this.call<TeamRecord[]>('listTeams'); }
-  createTeam(payload: Record<string, unknown>) { return this.call<TeamRecord>('createTeam', payload); }
-  updateTeam(payload: Record<string, unknown>) { return this.call<TeamRecord>('updateTeam', payload); }
+  createTeam(payload: Record<string, unknown>) { return this.call<TeamRecord>('createTeam', payload).then(result=>{invalidateReadCache('super-admin-dashboard');return result}); }
+  updateTeam(payload: Record<string, unknown>) { return this.call<TeamRecord>('updateTeam', payload).then(result=>{invalidateReadCache('super-admin-dashboard');return result}); }
   listBrands() { return this.call<BrandRecord[]>('listBrands'); }
-  createBrand(payload: Record<string, unknown>) { return this.call<BrandRecord>('createBrand', payload); }
-  updateBrand(payload: Record<string, unknown>) { return this.call<BrandRecord>('updateBrand', payload); }
+  createBrand(payload: Record<string, unknown>) { return this.call<BrandRecord>('createBrand', payload).then(result=>{invalidateReadCache('super-admin-dashboard');return result}); }
+  updateBrand(payload: Record<string, unknown>) { return this.call<BrandRecord>('updateBrand', payload).then(result=>{invalidateReadCache('super-admin-dashboard');return result}); }
   validateAffiliateImport(payload: Record<string, unknown>) { return this.call<ImportValidation>('validateAffiliateImport', payload); }
-  commitAffiliateImport(payload: Record<string, unknown>) { return this.call<ImportCommitResult>('commitAffiliateImport', payload); }
+  commitAffiliateImport(payload: Record<string, unknown>) { return this.call<ImportCommitResult>('commitAffiliateImport', payload).then(result=>{invalidateReadCache('super-admin-dashboard');return result}); }
   getMyWork(page = 1, pageSize = 100) { return this.call<MyWorkResponse>('getMyWork', { page, pageSize }); }
   getMyFollowups(page = 1, pageSize = 200) { return this.call<FollowupsResponse>('getMyFollowups', {page,pageSize}); }
   getMyInteractions(page = 1, pageSize = 500) { return this.call<InteractionsResponse>('getMyInteractions', {page,pageSize}); }
+  getSuperAdminDashboard() { return this.call<SuperAdminDashboard>('getSuperAdminDashboard'); }
   listAffiliates(page = 1, pageSize = 500) { return this.call<AffiliateDirectoryResponse>('listAffiliates', {page,pageSize}); }
   getAffiliateDetail(affiliateId:string) { return this.call<AffiliateDetailResponse>('getAffiliateDetail', {affiliateId}); }
   getWorkWorkspace(workId:string) { return this.call<WorkWorkspace>('getWorkWorkspace', {workId}); }

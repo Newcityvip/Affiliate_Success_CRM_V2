@@ -13,7 +13,8 @@
     "test:followups": "node tests/followups.test.js && node tests/callback-workflow.test.js",
     "test:performance": "node tests/performance-regression.test.js",
     "test:filters": "node tests/operational-filters.test.js",
-    "test:interactions": "node tests/interactions.test.js"
+    "test:interactions": "node tests/interactions.test.js",
+    "test:dashboard": "node tests/super-admin-dashboard.test.js && node tests/dashboard-filters.test.js"
   },
   "dependencies": {
     "next": "^16.3.3",
