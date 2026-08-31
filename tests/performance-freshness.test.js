@@ -1,0 +1,14 @@
+const assert=require('assert'),fs=require('fs'),vm=require('vm');
+const c={console,Date,String,Number,Boolean,Math,Object,Array,JSON,isFinite,apiError_:(code,message)=>Object.assign(new Error(message),{code}),rows_:()=>[]};vm.createContext(c);vm.runInContext(fs.readFileSync('backend/Performance.gs','utf8'),c);
+const T=Date.parse('2026-08-31T12:34:56.789Z'),row=t=>({Affiliate_ID:'A1',Brand_ID:'B1',Period:'2026-08',Imported_At:new Date(t).toISOString()}),fresh=(rows,now,conflict=false)=>c.performanceFreshness_(c.performanceIndex_(rows),'A1','B1',now,conflict);
+assert.equal(fresh([row(T)],T).freshnessStatus,'FRESH');
+assert.equal(fresh([row(T)],T+30*86400000-1).freshnessStatus,'FRESH');
+assert.equal(fresh([row(T)],T+30*86400000).freshnessStatus,'UPDATE_DUE');
+assert.equal(fresh([row(T)],T+31*86400000).performanceUpdateDue,true);
+assert.equal(fresh([row(T),{...row(T+20*86400000),Period:'2026-09'}],T+31*86400000).freshnessStatus,'FRESH');
+assert.equal(fresh([],T).freshnessStatus,'NO_UPDATE');
+assert.equal(fresh([row(T),{...row(T),Performance_ID:'P2'}],T+86400000,true).freshnessStatus,'REVIEW_REQUIRED');
+assert.equal(fresh([{...row(T),Period:'2026-07'}],T+86400000).freshnessStatus,'FRESH');
+assert.equal(c.performanceGroup_(c.performanceIndex_([{...row(T),Period:'2026-07'}]),'A1','B1','2026-08').length,0);
+assert.equal(fresh([row(T)],Date.parse('2026-09-30T12:34:56.789Z')).freshnessStatus,'UPDATE_DUE');
+console.log('performance freshness tests passed');

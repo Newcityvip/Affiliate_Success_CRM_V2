@@ -1,6 +1,7 @@
 var REQUEST_CONTEXT=null;
-function beginRequest_(){REQUEST_CONTEXT={spreadsheet:null,sheets:{},rows:{},metrics:{authMs:0,spreadsheetOpenMs:0,sheetReadMs:0,sheetReads:0,rowsRead:0}}}
+function beginRequest_(){REQUEST_CONTEXT={spreadsheet:null,sheets:{},rows:{},memo:{},metrics:{authMs:0,spreadsheetOpenMs:0,sheetReadMs:0,sheetReads:0,rowsRead:0}}}
 function context_(){if(!REQUEST_CONTEXT)beginRequest_();return REQUEST_CONTEXT}
+function requestMemo_(key,builder){var ctx=context_();if(Object.prototype.hasOwnProperty.call(ctx.memo,key))return ctx.memo[key];return ctx.memo[key]=builder()}
 function requestMetrics_(){return context_().metrics}
 function spreadsheet_() {
   var ctx=context_();if(ctx.spreadsheet)return ctx.spreadsheet;
@@ -36,6 +37,6 @@ function reserveIdsUnlocked_(entity,count){
 }
 function now_(){return new Date().toISOString()}
 function cacheRows_(name,seconds){var c=CacheService.getScriptCache(),key='rows:'+name,cached=c.get(key);if(cached)return JSON.parse(cached);var data=rows_(name);c.put(key,JSON.stringify(data),seconds||300);return data}
-function clearCache_(name){var ctx=context_();delete ctx.rows[name];CacheService.getScriptCache().remove('rows:'+name)}
+function clearCache_(name){var ctx=context_();delete ctx.rows[name];ctx.memo={};CacheService.getScriptCache().remove('rows:'+name)}
 function audit_(user,action,type,id,affiliateId,before,after,context){context=context||{};if(!context.force&&!config_('AUDIT_ENABLED'))return;appendRows_('Audit_Log',[{Audit_ID:nextId('Audit'),Timestamp:now_(),User_ID:user&&user.Staff_ID||'SYSTEM',Username:user&&user.Username||'SYSTEM',Role:user&&user.Role||'SYSTEM',Action:action,Entity_Type:type,Entity_ID:id||'',Affiliate_ID:affiliateId||'',Old_Value:JSON.stringify(before||null),New_Value:JSON.stringify(after||null),Details:context.details||'',IP_Address:'',Session_ID:context.sessionId||'',Request_ID:context.requestId||''}])}
 function page_(items,payload){var size=Math.max(1,Math.min(Number(payload.pageSize)||50,100)),page=Math.max(1,Number(payload.page)||1),start=(page-1)*size;return {items:items.slice(start,start+size),page:page,pageSize:size,total:items.length}}

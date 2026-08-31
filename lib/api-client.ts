@@ -17,7 +17,7 @@ export type FirstContactResult = { workId:string;affiliateId:string;assignmentId
 export type AffiliateDirectoryItem = { affiliateId:string;affiliateUsername:string;affiliateName:string;email:string;phone:string;telegramUsername:string;preferredChannel:string;brandId:string;brandName:string;brandCode:string;lifecycleStatus:string;prospectStatus:string;telegramStatus:string;priority:string;archiveStatus:string;assignedStaffId:string;assignedStaffName:string;assignmentId:string;lastContactAt:string;lastMeaningfulContactAt:string;activeWorkCount:number;currentWorkId:string;currentWorkType:string;currentWorkDueAt:string };
 export type AffiliateDirectoryResponse = { items:AffiliateDirectoryItem[];page:number;pageSize:number;total:number;summary:{totalAffiliates:number;telegramConnected:number;activeProspects:number;activeWork:number} };
 export type AffiliateActivity = { id:string;type:string;timestamp:string;status:string;channel:string;summary:string;notes:string };
-export type AffiliateDetailResponse = { profile:AffiliateDirectoryItem;recentActivity:AffiliateActivity[];performance?:{period:string;current:PerformanceMetrics|null;previous:PerformanceMetrics|null;dataConflict?:boolean};canUpdatePerformance?:boolean };
+export type AffiliateDetailResponse = { profile:AffiliateDirectoryItem;recentActivity:AffiliateActivity[];performance?:{period:string;current:PerformanceMetrics|null;previous:PerformanceMetrics|null;dataConflict?:boolean;lastSuccessfulUpdate?:string;updateDueAt?:string;freshnessStatus?:PerformanceFreshness;performanceUpdateDue?:boolean};canUpdatePerformance?:boolean };
 export type FollowupItem = { followupId:string;affiliateId:string;assignmentId:string;staffId:string;affiliateUsername:string;affiliateName:string;brandId:string;brandName:string;brandCode:string;followupType:string;channel:string;status:string;dueAt:string;priority:string;title:string;reason:string;notes:string;sourceWorkId:string;linkedWorkId:string;email:string;phone:string;telegramUsername:string;telegramStatus:string;overdue:boolean;dueToday:boolean;upcoming:boolean };
 export type FollowupsResponse = { items:FollowupItem[];page:number;pageSize:number;total:number;summary:{open:number;overdue:number;dueToday:number;upcoming:number} };
 export type InteractionItem = {id:string;affiliateId:string;affiliateUsername:string;affiliateName:string;brandName:string;brandCode:string;type:string;channel:string;outcome:string;timestamp:string;staffName:string;notes:string;summary:string;followupRequired:boolean};
@@ -39,8 +39,9 @@ export type ProspectContactWorkspace={affiliate:{affiliateId:string;affiliateUse
 export type ProspectAttemptResult={attemptId:string;attemptCount:number;replacementAttemptCount:number;replacementEligible:boolean;duplicate:boolean;replacement:ProspectReplacement|null};
 export type AffiliateDetailsUpdate={affiliateId:string;affiliateUsername:string;affiliateName:string;email:string;phone:string;telegramUsername:string;preferredChannel:string;changedFields:string[]};
 export type PerformanceMetrics={registeredUsers:number;ftd:number;activePlayers:number;totalDeposit:number;totalWithdrawal:number;totalTurnover:number;profitLoss:number;netCashFlow:number;ftdRate:number;activeRate:number;averageDepositPerActive:number;turnoverPerActive:number};
-export type PerformanceItem={affiliateId:string;affiliateUsername:string;affiliateName:string;brandId:string;brandName:string;staffId:string;staffName:string;period:string;status:'NOT_UPDATED'|'HEALTHY'|'NEEDS_ATTENTION'|'DATA_CONFLICT';performanceId:string;metrics:PerformanceMetrics|null;previous:PerformanceMetrics|null;comparisons:Record<string,{direction:string;percent:number|null}>;needsAttention:boolean;attentionReasons:string[];lastUpdated:string;conflict:null|{count:number;recordIds:string[]}};
-export type PerformanceWorkspace={period:string;canManage:boolean;items:PerformanceItem[];summary:{assignedAffiliates:number;updated:number;notUpdated:number;needsAttention:number;dataConflicts:number;registeredUsers:number;ftd:number;activePlayers:number;totalDeposit:number;totalWithdrawal:number;totalTurnover:number;profitLoss:number};staff:Array<{staffId:string;staffName:string;teamId:string;teamName:string;assignedAffiliates:number;updated:number;updatedPercent:number;needsAttention:number;dataConflicts:number;registeredUsers:number;ftd:number;activePlayers:number;totalDeposit:number;totalWithdrawal:number;totalTurnover:number;profitLoss:number;ftdPerAffiliate:number;activePlayersPerAffiliate:number;depositPerAffiliate:number;turnoverPerAffiliate:number}>;options:{staff:Array<{staffId:string;displayName:string;teamId:string}>;teams:Array<{teamId:string;teamName:string}>;brands:Array<{brandId:string;brandName:string}>}};
+export type PerformanceFreshness='FRESH'|'UPDATE_DUE'|'NO_UPDATE'|'REVIEW_REQUIRED';
+export type PerformanceItem={affiliateId:string;affiliateUsername:string;affiliateName:string;brandId:string;brandName:string;staffId:string;staffName:string;period:string;status:'NOT_UPDATED'|'HEALTHY'|'NEEDS_ATTENTION'|'DATA_CONFLICT';performanceId:string;metrics:PerformanceMetrics|null;previous:PerformanceMetrics|null;comparisons:Record<string,{direction:string;percent:number|null}>;needsAttention:boolean;attentionReasons:string[];lastUpdated:string;lastSuccessfulUpdate:string;updateDueAt:string;freshnessStatus:PerformanceFreshness;performanceUpdateDue:boolean;conflict:null|{count:number;recordIds:string[]}};
+export type PerformanceWorkspace={period:string;canManage:boolean;items:PerformanceItem[];summary:{assignedAffiliates:number;updated:number;notUpdated:number;needsAttention:number;dataConflicts:number;fresh:number;updateDue:number;registeredUsers:number;ftd:number;activePlayers:number;totalDeposit:number;totalWithdrawal:number;totalTurnover:number;profitLoss:number};staff:Array<{staffId:string;staffName:string;teamId:string;teamName:string;assignedAffiliates:number;updated:number;updatedPercent:number;needsAttention:number;dataConflicts:number;updateDue:number;registeredUsers:number;ftd:number;activePlayers:number;totalDeposit:number;totalWithdrawal:number;totalTurnover:number;profitLoss:number;ftdPerAffiliate:number;activePlayersPerAffiliate:number;depositPerAffiliate:number;turnoverPerAffiliate:number}>;options:{staff:Array<{staffId:string;displayName:string;teamId:string}>;teams:Array<{teamId:string;teamName:string}>;brands:Array<{brandId:string;brandName:string}>}};
 export type IntelligenceAttention={id:string;severity:'CRITICAL'|'HIGH'|'MEDIUM'|'LOW'|'INFO';reason:string;context:string;nextAction:string;href:string;affiliateId:string;affiliateUsername:string;affiliateName:string;brandName:string;dueAt:string};
 export type IntelligenceWorkspace={period:string;canManage:boolean;summaryText:string[];kpis:Record<string,number>;attention:IntelligenceAttention[];movement:{growing:PerformanceMovement[];declining:PerformanceMovement[];highestPnl:PerformanceMovement[];highestTurnover:PerformanceMovement[];highestDeposit:PerformanceMovement[];zeroActive:PerformanceMovement[];missing:PerformanceItem[];conflicts:PerformanceItem[]};trend:Array<{period:string;profitLoss:number;turnover:number;updated:number;dataConflicts:number}>;relationship:Record<string,number|null>;discipline:Record<string,number>;staff:Array<Record<string,string|number|null>>;options:PerformanceWorkspace['options']};
 export type PerformanceMovement={affiliateId:string;affiliateUsername:string;affiliateName:string;brandName:string;value:number;change:{direction:string;percent:number|null}|null;status:string;reasons:string[]};
@@ -48,7 +49,7 @@ export type PerformanceMovement={affiliateId:string;affiliateUsername:string;aff
 export class ApiError extends Error { constructor(message: string, public code = 'API_ERROR') { super(message); } }
 type ApiEnvelope<T> = { ok: boolean; data?: T; error?: { code: string; message: string } };
 
-class ApiClient {
+export class ApiClient {
   private baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? '';
   private timeoutMs = 30_000;
   private token() { return typeof window === 'undefined' ? null : localStorage.getItem('crm_session_token'); }
@@ -58,41 +59,45 @@ class ApiClient {
     const timeout = window.setTimeout(() => controller.abort(), this.timeoutMs);
     try {
       const response = await fetch(this.baseUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, token: this.token(), payload }), signal: controller.signal });
+      if(response.status>=500)throw new ApiError('The service is temporarily unavailable. Please try again.','TEMPORARY_UNAVAILABLE');
       const result = await response.json() as ApiEnvelope<T>;
       if (!response.ok || !result.ok) throw new ApiError(result.error?.message ?? 'Request failed.', result.error?.code);
       return result.data as T;
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === 'AbortError') throw new ApiError('The request timed out. Please try again.', 'REQUEST_TIMEOUT');
+      if(cause instanceof TypeError)throw new ApiError('The network request failed. Please try again.','NETWORK_ERROR');
+      if(cause instanceof SyntaxError)throw new ApiError('The service returned a temporary invalid response. Please try again.','TEMPORARY_UNAVAILABLE');
       throw cause;
     } finally { window.clearTimeout(timeout); }
   }
+  async read<T>(action:string,payload:Record<string,unknown>={}){try{return await this.call<T>(action,payload)}catch(cause){if(!(cause instanceof ApiError)||!['REQUEST_TIMEOUT','NETWORK_ERROR','TEMPORARY_UNAVAILABLE'].includes(cause.code))throw cause;await new Promise(resolve=>window.setTimeout(resolve,250+Math.floor(Math.random()*201)));return this.call<T>(action,payload)}}
   login(username: string, password: string) { return this.call<LoginResponse>('login', { username, password, userAgent: typeof navigator === 'undefined' ? '' : navigator.userAgent }); }
   logout() { return this.call<void>('logout'); }
-  validateSession() { return this.call<{ valid: boolean }>('validateSession'); }
-  currentUser() { return this.call<CurrentUser>('currentUser'); }
-  listStaff() { return this.call<StaffRecord[]>('listStaff'); }
+  validateSession() { return this.read<{ valid: boolean }>('validateSession'); }
+  currentUser() { return this.read<CurrentUser>('currentUser'); }
+  listStaff() { return this.read<StaffRecord[]>('listStaff'); }
   createStaff(payload: Record<string, unknown>) { return this.call<StaffRecord>('createStaff', payload).then(result=>{invalidateReadCache('super-admin-dashboard','intelligence');return result}); }
   updateStaff(payload: Record<string, unknown>) { return this.call<StaffRecord>('updateStaff', payload).then(result=>{invalidateReadCache('super-admin-dashboard','intelligence');return result}); }
   setStaffStatus(staffId:string,status:StaffRecord['status']) { return this.call<StaffRecord>('setStaffStatus', {staffId,status}).then(result=>{invalidateReadCache('super-admin-dashboard','intelligence');return result}); }
   resetStaffPassword(staffId:string,newPassword:string) { return this.call<{staffId:string;sessionsRevoked:number}>('resetStaffPassword', {staffId,newPassword}); }
-  listTeams() { return this.call<TeamRecord[]>('listTeams'); }
+  listTeams() { return this.read<TeamRecord[]>('listTeams'); }
   createTeam(payload: Record<string, unknown>) { return this.call<TeamRecord>('createTeam', payload).then(result=>{invalidateReadCache('super-admin-dashboard','intelligence');return result}); }
   updateTeam(payload: Record<string, unknown>) { return this.call<TeamRecord>('updateTeam', payload).then(result=>{invalidateReadCache('super-admin-dashboard','intelligence');return result}); }
-  listBrands() { return this.call<BrandRecord[]>('listBrands'); }
+  listBrands() { return this.read<BrandRecord[]>('listBrands'); }
   createBrand(payload: Record<string, unknown>) { return this.call<BrandRecord>('createBrand', payload).then(result=>{invalidateReadCache('super-admin-dashboard','intelligence');return result}); }
   updateBrand(payload: Record<string, unknown>) { return this.call<BrandRecord>('updateBrand', payload).then(result=>{invalidateReadCache('super-admin-dashboard','intelligence');return result}); }
-  validateAffiliateImport(payload: Record<string, unknown>) { return this.call<ImportValidation>('validateAffiliateImport', payload); }
+  validateAffiliateImport(payload: Record<string, unknown>) { return this.read<ImportValidation>('validateAffiliateImport', payload); }
   commitAffiliateImport(payload: Record<string, unknown>) { return this.call<ImportCommitResult>('commitAffiliateImport', payload).then(result=>{invalidateReadCache('super-admin-dashboard','intelligence');return result}); }
-  getMyWork(page = 1, pageSize = 100) { return this.call<MyWorkResponse>('getMyWork', { page, pageSize }); }
-  getMyFollowups(page = 1, pageSize = 200) { return this.call<FollowupsResponse>('getMyFollowups', {page,pageSize}); }
-  getMyInteractions(page = 1, pageSize = 500) { return this.call<InteractionsResponse>('getMyInteractions', {page,pageSize}); }
-  getSuperAdminDashboard() { return this.call<SuperAdminDashboard>('getSuperAdminDashboard'); }
-  getStaffDashboard() { return this.call<StaffDashboard>('getStaffDashboard'); }
-  getPerformanceWorkspace(period:string,filters:Record<string,unknown>={}) { return this.call<PerformanceWorkspace>('getPerformanceWorkspace',{period,...filters}); }
-  getIntelligenceWorkspace(period:string,filters:Record<string,unknown>={}) { return this.call<IntelligenceWorkspace>('getIntelligenceWorkspace',{period,...filters}); }
+  getMyWork(page = 1, pageSize = 100) { return this.read<MyWorkResponse>('getMyWork', { page, pageSize }); }
+  getMyFollowups(page = 1, pageSize = 200) { return this.read<FollowupsResponse>('getMyFollowups', {page,pageSize}); }
+  getMyInteractions(page = 1, pageSize = 500) { return this.read<InteractionsResponse>('getMyInteractions', {page,pageSize}); }
+  getSuperAdminDashboard() { return this.read<SuperAdminDashboard>('getSuperAdminDashboard'); }
+  getStaffDashboard() { return this.read<StaffDashboard>('getStaffDashboard'); }
+  getPerformanceWorkspace(period:string,filters:Record<string,unknown>={}) { return this.read<PerformanceWorkspace>('getPerformanceWorkspace',{period,...filters}); }
+  getIntelligenceWorkspace(period:string,filters:Record<string,unknown>={}) { return this.read<IntelligenceWorkspace>('getIntelligenceWorkspace',{period,...filters}); }
   saveAffiliatePerformance(payload:Record<string,unknown>) { return this.call<{performanceId:string;created:boolean;metrics:PerformanceMetrics}>('saveAffiliatePerformance',payload).then(result=>{invalidateReadCache('performance','intelligence','affiliate','staff-dashboard','super-admin-dashboard');return result}); }
-  getTasks(page=1,pageSize=500) { return this.call<TasksResponse>('getTasks',{page,pageSize}); }
-  getIssues(page=1,pageSize=500) { return this.call<IssuesResponse>('getIssues',{page,pageSize}); }
+  getTasks(page=1,pageSize=500) { return this.read<TasksResponse>('getTasks',{page,pageSize}); }
+  getIssues(page=1,pageSize=500) { return this.read<IssuesResponse>('getIssues',{page,pageSize}); }
   createIssue(payload:Record<string,unknown>) { return this.call<IssueItem>('createIssue',payload).then(result=>{invalidateReadCache('issues','intelligence','staff-dashboard','super-admin-dashboard','affiliate');return result}); }
   updateIssueStatus(issueId:string,status:string,resolution='') { return this.call<IssueItem>('updateIssueStatus',{issueId,status,resolution}).then(result=>{invalidateReadCache('issues','intelligence','staff-dashboard','super-admin-dashboard','affiliate');return result}); }
   assignIssue(issueId:string,staffId:string) { return this.call<IssueItem>('assignIssue',{issueId,staffId}).then(result=>{invalidateReadCache('issues','intelligence','staff-dashboard','super-admin-dashboard','affiliate');return result}); }
@@ -101,17 +106,17 @@ class ApiClient {
   completeTask(taskId:string,completionNotes:string) { return this.call<TaskItem>('completeTask',{taskId,completionNotes}).then(result=>{invalidateReadCache('tasks','intelligence','staff-dashboard','super-admin-dashboard','affiliate-detail');return result}); }
   reassignTask(taskId:string,staffId:string) { return this.call<TaskItem>('reassignTask',{taskId,staffId}).then(result=>{invalidateReadCache('tasks','intelligence','staff-dashboard','super-admin-dashboard','affiliate-detail');return result}); }
   cancelTask(taskId:string,notes='') { return this.call<TaskItem>('cancelTask',{taskId,notes}).then(result=>{invalidateReadCache('tasks','intelligence','staff-dashboard','super-admin-dashboard','affiliate-detail');return result}); }
-  listAffiliates(page = 1, pageSize = 500) { return this.call<AffiliateDirectoryResponse>('listAffiliates', {page,pageSize}); }
-  getAffiliateDetail(affiliateId:string) { return this.call<AffiliateDetailResponse>('getAffiliateDetail', {affiliateId}); }
+  listAffiliates(page = 1, pageSize = 500) { return this.read<AffiliateDirectoryResponse>('listAffiliates', {page,pageSize}); }
+  getAffiliateDetail(affiliateId:string) { return this.read<AffiliateDetailResponse>('getAffiliateDetail', {affiliateId}); }
   updateAffiliateDetails(payload:Record<string,unknown>) { return this.call<AffiliateDetailsUpdate>('updateAffiliateDetails',payload).then(result=>{invalidateReadCache('affiliates','affiliate','intelligence','prospect-contact','my-work','staff-dashboard','super-admin-dashboard');return result}); }
-  getWorkWorkspace(workId:string) { return this.call<WorkWorkspace>('getWorkWorkspace', {workId}); }
-  getWorkWorkspaceBootstrap(workId:string) { return this.call<WorkWorkspaceBootstrap>('getWorkWorkspaceBootstrap', {workId}); }
-  getProspectContactWorkspace(affiliateId:string) { return this.call<ProspectContactWorkspace>('getProspectContactWorkspace',{affiliateId}); }
+  getWorkWorkspace(workId:string) { return this.read<WorkWorkspace>('getWorkWorkspace', {workId}); }
+  getWorkWorkspaceBootstrap(workId:string) { return this.read<WorkWorkspaceBootstrap>('getWorkWorkspaceBootstrap', {workId}); }
+  getProspectContactWorkspace(affiliateId:string) { return this.read<ProspectContactWorkspace>('getProspectContactWorkspace',{affiliateId}); }
   recordProspectContactAttempt(payload:Record<string,unknown>) { return this.call<ProspectAttemptResult>('recordProspectContactAttempt',payload).then(result=>{invalidateReadCache('prospect-contact','intelligence','my-work','affiliates','followups','interactions','staff-dashboard','super-admin-dashboard','affiliate');return result}); }
   requestProspectReplacement(affiliateId:string) { return this.call<ProspectReplacement>('requestProspectReplacement',{affiliateId}).then(result=>{invalidateReadCache('prospect-contact','intelligence','my-work','affiliates','followups','interactions','staff-dashboard','super-admin-dashboard','affiliate');return result}); }
   submitFirstContactOutcome(payload:Record<string,unknown>) { return this.call<FirstContactResult>('submitFirstContactOutcome', payload).then(result=>{invalidateReadCache('intelligence');return result}); }
   submitCallbackOutcome(payload:Record<string,unknown>) { return this.call<FirstContactResult>('submitCallbackOutcome', payload).then(result=>{invalidateReadCache('intelligence');return result}); }
-  getAffiliate(affiliateId: string) { return this.call<unknown>('getAffiliate', { affiliateId }); }
+  getAffiliate(affiliateId: string) { return this.read<unknown>('getAffiliate', { affiliateId }); }
   invoke<T>(action: string, payload: Record<string, unknown>) { return this.call<T>(action, payload); }
 }
 export const api = new ApiClient();

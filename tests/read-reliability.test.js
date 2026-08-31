@@ -1,0 +1,12 @@
+const assert=require('assert'),fs=require('fs');const source=fs.readFileSync('lib/api-client.ts','utf8');
+assert.match(source,/async read<[^]*REQUEST_TIMEOUT[^]*NETWORK_ERROR[^]*TEMPORARY_UNAVAILABLE/);
+assert.match(source,/await this\.call<T>\(action,payload\)[^]*return this\.call<T>\(action,payload\)/);
+assert.match(source,/getPerformanceWorkspace[^\n]*this\.read/);
+assert.match(source,/getIntelligenceWorkspace[^\n]*this\.read/);
+assert.match(source,/saveAffiliatePerformance[^\n]*this\.call/);
+assert.match(source,/recordProspectContactAttempt[^\n]*this\.call/);
+assert.match(source,/createTask[^\n]*this\.call/);
+assert.match(source,/createIssue[^\n]*this\.call/);
+assert.doesNotMatch(source,/localStorage\.removeItem/);
+assert.match(fs.readFileSync('app/performance/page.tsx','utf8'),/Performance unavailable[^]*Retry/);
+console.log('read reliability tests passed');
