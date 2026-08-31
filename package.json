@@ -19,7 +19,8 @@
     "test:issues": "node tests/issues.test.js",
     "test:replacement": "node tests/replacement-workflow.test.js",
     "test:affiliate-update": "node tests/affiliate-update.test.js",
-    "test:affiliate-performance": "node tests/affiliate-performance.test.js"
+    "test:affiliate-performance": "node tests/affiliate-performance.test.js",
+    "test:intelligence": "node tests/intelligence.test.js"
   },
   "dependencies": {
     "next": "^16.3.3",
