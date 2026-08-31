@@ -2,7 +2,7 @@
 
 1. Open the dedicated CRM V2 Google Spreadsheet.
 2. Choose **Extensions → Apps Script**. Use this spreadsheet-bound Apps Script project; do not connect the old CRM project.
-3. Add these repository files to the Apps Script project: `Admin.gs`, `Api.gs`, `Auth.gs`, `Config.gs`, `Dashboard.gs`, `Directory.gs`, `Followups.gs`, `Import.gs`, `Interactions.gs`, `Issues.gs`, `Schema.gs`, `Services.gs`, `Setup.gs`, `StaffDashboard.gs`, `Store.gs`, `Tasks.gs`, and `Workflow.gs`. In Project Settings, enable **Show "appsscript.json" manifest file in editor**, then replace it with `backend/appsscript.json`.
+3. Add these repository files to the Apps Script project: `Admin.gs`, `Api.gs`, `Auth.gs`, `Config.gs`, `Dashboard.gs`, `Directory.gs`, `Followups.gs`, `Import.gs`, `Interactions.gs`, `Issues.gs`, `Replacement.gs`, `Schema.gs`, `Services.gs`, `Setup.gs`, `StaffDashboard.gs`, `Store.gs`, `Tasks.gs`, and `Workflow.gs`. In Project Settings, enable **Show "appsscript.json" manifest file in editor**, then replace it with `backend/appsscript.json`.
 4. Open **Project Settings → Script properties → Add script property**. Set the property name to `SPREADSHEET_ID` and the value to the ID between `/d/` and `/edit` in the spreadsheet URL.
 5. Select `setupSpreadsheet` in the function selector and click **Run**. It creates only allowed missing sheets/counters and preserves every existing row/header. Approve the requested spreadsheet authorization.
 6. Run `validateSpreadsheetSchema`. Success is an object with `ok: true`, all 18 names in `okSheets`, and empty arrays for `missingSheets`, `headerMismatches`, `duplicateHeaders`, `missingRequiredColumns`, and `unexpectedColumns`.

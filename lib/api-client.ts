@@ -33,6 +33,10 @@ export type StaffDashboard={generatedAt:string;metrics:{openWork:number;overdueW
 export type IssueItem={issueId:string;affiliateId:string;assignmentId:string;affiliateUsername:string;affiliateName:string;brandId:string;brandName:string;brandCode:string;issueType:string;priority:string;status:string;title:string;description:string;reportedById:string;reportedByName:string;assignedToId:string;assignedToName:string;ownerActive:boolean;reportedAt:string;dueAt:string;resolvedAt:string;resolution:string;escalationLevel:number;sourceInteractionId:string;createdAt:string;updatedAt:string};
 export type IssueOptions={affiliates:Array<{affiliateId:string;affiliateUsername:string;affiliateName:string;brandName:string;staffId:string;assignmentId:string}>;staff:Array<{staffId:string;displayName:string;team:string}>};
 export type IssuesResponse={items:IssueItem[];page:number;pageSize:number;total:number;summary:{open:number;inProgress:number;urgent:number;resolved:number;closed:number};canManage:boolean;options:IssueOptions};
+export type ProspectAttempt={attemptId:string;attemptNumber:number;channel:string;outcome:string;notes:string;attemptAt:string;nextContactAt:string};
+export type ProspectReplacement={status:'REPLACED'|'PENDING';message:string;oldAffiliateId:string;oldAssignmentId:string;replacementAffiliateId:string;replacementAssignmentId:string;replacementWorkId:string;replacementUsername?:string};
+export type ProspectContactWorkspace={affiliate:{affiliateId:string;affiliateUsername:string;affiliateName:string;brandId:string;brandName:string;brandCode:string;lifecycleStatus:string;prospectStatus:string};assignment:{assignmentId:string;staffId:string;status:string};work:null|{workId:string;status:string;type:string;dueAt:string};attempts:ProspectAttempt[];attemptCount:number;replacementAttemptCount:number;attemptsRequired:number;replacementEligible:boolean;minimumSpacingHours:number};
+export type ProspectAttemptResult={attemptId:string;attemptCount:number;replacementAttemptCount:number;replacementEligible:boolean;duplicate:boolean;replacement:ProspectReplacement|null};
 
 export class ApiError extends Error { constructor(message: string, public code = 'API_ERROR') { super(message); } }
 type ApiEnvelope<T> = { ok: boolean; data?: T; error?: { code: string; message: string } };
@@ -91,6 +95,9 @@ class ApiClient {
   getAffiliateDetail(affiliateId:string) { return this.call<AffiliateDetailResponse>('getAffiliateDetail', {affiliateId}); }
   getWorkWorkspace(workId:string) { return this.call<WorkWorkspace>('getWorkWorkspace', {workId}); }
   getWorkWorkspaceBootstrap(workId:string) { return this.call<WorkWorkspaceBootstrap>('getWorkWorkspaceBootstrap', {workId}); }
+  getProspectContactWorkspace(affiliateId:string) { return this.call<ProspectContactWorkspace>('getProspectContactWorkspace',{affiliateId}); }
+  recordProspectContactAttempt(payload:Record<string,unknown>) { return this.call<ProspectAttemptResult>('recordProspectContactAttempt',payload).then(result=>{invalidateReadCache('prospect-contact','my-work','affiliates','followups','interactions','staff-dashboard','super-admin-dashboard','affiliate');return result}); }
+  requestProspectReplacement(affiliateId:string) { return this.call<ProspectReplacement>('requestProspectReplacement',{affiliateId}).then(result=>{invalidateReadCache('prospect-contact','my-work','affiliates','followups','interactions','staff-dashboard','super-admin-dashboard','affiliate');return result}); }
   submitFirstContactOutcome(payload:Record<string,unknown>) { return this.call<FirstContactResult>('submitFirstContactOutcome', payload); }
   submitCallbackOutcome(payload:Record<string,unknown>) { return this.call<FirstContactResult>('submitCallbackOutcome', payload); }
   getAffiliate(affiliateId: string) { return this.call<unknown>('getAffiliate', { affiliateId }); }
