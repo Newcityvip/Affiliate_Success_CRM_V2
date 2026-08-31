@@ -35,8 +35,9 @@ export type IssueOptions={affiliates:Array<{affiliateId:string;affiliateUsername
 export type IssuesResponse={items:IssueItem[];page:number;pageSize:number;total:number;summary:{open:number;inProgress:number;urgent:number;resolved:number;closed:number};canManage:boolean;options:IssueOptions};
 export type ProspectAttempt={attemptId:string;attemptNumber:number;channel:string;outcome:string;notes:string;attemptAt:string;nextContactAt:string};
 export type ProspectReplacement={status:'REPLACED'|'PENDING';message:string;oldAffiliateId:string;oldAssignmentId:string;replacementAffiliateId:string;replacementAssignmentId:string;replacementWorkId:string;replacementUsername?:string};
-export type ProspectContactWorkspace={affiliate:{affiliateId:string;affiliateUsername:string;affiliateName:string;brandId:string;brandName:string;brandCode:string;lifecycleStatus:string;prospectStatus:string};assignment:{assignmentId:string;staffId:string;status:string};work:null|{workId:string;status:string;type:string;dueAt:string};attempts:ProspectAttempt[];attemptCount:number;replacementAttemptCount:number;attemptsRequired:number;replacementEligible:boolean;minimumSpacingHours:number};
+export type ProspectContactWorkspace={affiliate:{affiliateId:string;affiliateUsername:string;affiliateName:string;brandId:string;brandName:string;brandCode:string;lifecycleStatus:string;prospectStatus:string};assignment:{assignmentId:string;staffId:string;status:string};work:null|{workId:string;status:string;type:string;dueAt:string};attempts:ProspectAttempt[];attemptCount:number;replacementAttemptCount:number;attemptsRequired:number;replacementEligible:boolean;nextQualifyingAt:string;qualifyingWaitHours:number;qualifyingAttemptAllowed:boolean};
 export type ProspectAttemptResult={attemptId:string;attemptCount:number;replacementAttemptCount:number;replacementEligible:boolean;duplicate:boolean;replacement:ProspectReplacement|null};
+export type AffiliateDetailsUpdate={affiliateId:string;affiliateUsername:string;affiliateName:string;email:string;phone:string;telegramUsername:string;preferredChannel:string;changedFields:string[]};
 
 export class ApiError extends Error { constructor(message: string, public code = 'API_ERROR') { super(message); } }
 type ApiEnvelope<T> = { ok: boolean; data?: T; error?: { code: string; message: string } };
@@ -93,6 +94,7 @@ class ApiClient {
   cancelTask(taskId:string,notes='') { return this.call<TaskItem>('cancelTask',{taskId,notes}).then(result=>{invalidateReadCache('tasks','staff-dashboard','super-admin-dashboard','affiliate-detail');return result}); }
   listAffiliates(page = 1, pageSize = 500) { return this.call<AffiliateDirectoryResponse>('listAffiliates', {page,pageSize}); }
   getAffiliateDetail(affiliateId:string) { return this.call<AffiliateDetailResponse>('getAffiliateDetail', {affiliateId}); }
+  updateAffiliateDetails(payload:Record<string,unknown>) { return this.call<AffiliateDetailsUpdate>('updateAffiliateDetails',payload).then(result=>{invalidateReadCache('affiliates','affiliate','prospect-contact','my-work','staff-dashboard','super-admin-dashboard');return result}); }
   getWorkWorkspace(workId:string) { return this.call<WorkWorkspace>('getWorkWorkspace', {workId}); }
   getWorkWorkspaceBootstrap(workId:string) { return this.call<WorkWorkspaceBootstrap>('getWorkWorkspaceBootstrap', {workId}); }
   getProspectContactWorkspace(affiliateId:string) { return this.call<ProspectContactWorkspace>('getProspectContactWorkspace',{affiliateId}); }

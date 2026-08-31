@@ -17,7 +17,8 @@
     "test:dashboard": "node tests/super-admin-dashboard.test.js && node tests/dashboard-filters.test.js && node tests/staff-dashboard.test.js",
     "test:tasks": "node tests/tasks.test.js",
     "test:issues": "node tests/issues.test.js",
-    "test:replacement": "node tests/replacement-workflow.test.js"
+    "test:replacement": "node tests/replacement-workflow.test.js",
+    "test:affiliate-update": "node tests/affiliate-update.test.js"
   },
   "dependencies": {
     "next": "^16.3.3",
