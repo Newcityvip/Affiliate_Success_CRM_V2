@@ -22,7 +22,9 @@
     "test:affiliate-performance": "node tests/affiliate-performance.test.js",
     "test:intelligence": "node tests/intelligence.test.js",
     "test:freshness": "node tests/performance-freshness.test.js",
-    "test:read-reliability": "node tests/read-reliability.test.js"
+    "test:read-reliability": "node tests/read-reliability.test.js",
+    "test:dashboard-regression": "node tests/dashboard-regression.test.js",
+    "test:reports": "node tests/reports.test.js"
   },
   "dependencies": {
     "next": "^16.3.3",
