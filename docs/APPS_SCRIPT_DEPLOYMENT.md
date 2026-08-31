@@ -2,7 +2,7 @@
 
 1. Open the dedicated CRM V2 Google Spreadsheet.
 2. Choose **Extensions → Apps Script**. Use this spreadsheet-bound Apps Script project; do not connect the old CRM project.
-3. Add these repository files to the Apps Script project: `Admin.gs`, `Api.gs`, `Auth.gs`, `Config.gs`, `Dashboard.gs`, `Directory.gs`, `Followups.gs`, `Import.gs`, `Interactions.gs`, `Issues.gs`, `Replacement.gs`, `Schema.gs`, `Services.gs`, `Setup.gs`, `StaffDashboard.gs`, `Store.gs`, `Tasks.gs`, and `Workflow.gs`. In Project Settings, enable **Show "appsscript.json" manifest file in editor**, then replace it with `backend/appsscript.json`.
+3. Add these repository files to the Apps Script project: `Admin.gs`, `Api.gs`, `Auth.gs`, `Config.gs`, `Dashboard.gs`, `Directory.gs`, `Followups.gs`, `Import.gs`, `Interactions.gs`, `Issues.gs`, `Performance.gs`, `Replacement.gs`, `Schema.gs`, `Services.gs`, `Setup.gs`, `StaffDashboard.gs`, `Store.gs`, `Tasks.gs`, and `Workflow.gs`. In Project Settings, enable **Show "appsscript.json" manifest file in editor**, then replace it with `backend/appsscript.json`.
 4. Open **Project Settings → Script properties → Add script property**. Set the property name to `SPREADSHEET_ID` and the value to the ID between `/d/` and `/edit` in the spreadsheet URL.
 5. Select `setupSpreadsheet` in the function selector and click **Run**. It creates only allowed missing sheets/counters and preserves every existing row/header. Approve the requested spreadsheet authorization.
 6. Run `validateSpreadsheetSchema`. Success is an object with `ok: true`, all 18 names in `okSheets`, and empty arrays for `missingSheets`, `headerMismatches`, `duplicateHeaders`, `missingRequiredColumns`, and `unexpectedColumns`.
@@ -58,3 +58,12 @@ Successful and failed login executions write structured `login_timing` and `api_
 6. Confirm the `/exec` URL is unchanged. Test validation first, then one small direct import and one pool import.
 
 The importer accepts at most 500 pasted TSV/CSV rows. Validation is read-only. Commit revalidates under `LockService`, reserves each ID range with one counter write, and appends Affiliates, Assignments, Work Items, or pool entries in grouped writes. Pool `Brand` values are stable `Brand_Code` values. Direct imports create `PENDING` first-contact work because that is the existing work-engine status consumed by My Work.
+
+## Monthly Performance migration
+
+1. Replace the changed backend files from the release report and create `Performance.gs` in the existing Apps Script project.
+2. Run `validateSpreadsheetSchema()`. Before migration, the only expected problem is the missing trailing `Withdrawal_Amount` column on `Monthly_Performance`; review any other reported difference before proceeding.
+3. Run `addMonthlyPerformanceWithdrawalColumn()` once from the Apps Script editor. It validates the exact legacy header sequence and appends only `Withdrawal_Amount`, preserving all existing rows and columns. Do not run `setupSpreadsheet()` for this migration.
+4. Run `validateSpreadsheetSchema()` again and require `ok=true` with all problem arrays empty.
+5. Choose **Deploy → Manage deployments**, edit the existing Web App, select **New version**, and deploy with **Execute as: Me** and **Who has access: Anyone** unchanged.
+6. Confirm the existing `/exec` URL is unchanged. Test one STAFF-owned affiliate update, then verify the staff Performance workspace, Affiliate 360, and management rollup.
