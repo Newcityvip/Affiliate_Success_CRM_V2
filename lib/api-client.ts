@@ -19,7 +19,9 @@ export type AffiliateDirectoryResponse = { items:AffiliateDirectoryItem[];page:n
 export type AffiliateActivity = { id:string;type:string;timestamp:string;status:string;channel:string;summary:string;notes:string };
 export type AffiliateDetailResponse = { profile:AffiliateDirectoryItem;recentActivity:AffiliateActivity[];performance?:{period:string;current:PerformanceMetrics|null;previous:PerformanceMetrics|null;dataConflict?:boolean;lastSuccessfulUpdate?:string;updateDueAt?:string;freshnessStatus?:PerformanceFreshness;performanceUpdateDue?:boolean};canUpdatePerformance?:boolean };
 export type FollowupItem = { followupId:string;affiliateId:string;assignmentId:string;staffId:string;affiliateUsername:string;affiliateName:string;brandId:string;brandName:string;brandCode:string;followupType:string;channel:string;status:string;dueAt:string;priority:string;title:string;reason:string;notes:string;sourceWorkId:string;linkedWorkId:string;email:string;phone:string;telegramUsername:string;telegramStatus:string;overdue:boolean;dueToday:boolean;upcoming:boolean };
-export type FollowupsResponse = { items:FollowupItem[];page:number;pageSize:number;total:number;summary:{open:number;overdue:number;dueToday:number;upcoming:number} };
+export type FollowupsResponse = { items:FollowupItem[];page:number;pageSize:number;total:number;hasMore?:boolean;summary:{open:number;overdue:number;dueToday:number;upcoming:number} };
+export type AffiliateLookupItem={affiliateId:string;affiliateUsername:string;affiliateName:string;brandId:string;brandName:string;staffId:string;staffName:string};
+export type AffiliateLookupResponse={items:AffiliateLookupItem[];query:string;limit:number};
 export type InteractionItem = {id:string;affiliateId:string;affiliateUsername:string;affiliateName:string;brandName:string;brandCode:string;type:string;channel:string;outcome:string;timestamp:string;staffName:string;notes:string;summary:string;followupRequired:boolean};
 export type InteractionsResponse = {items:InteractionItem[];page:number;pageSize:number;total:number};
 export type DashboardStaff={staffId:string;displayName:string;username:string;team:string;activeAffiliates:number;openWork:number;overdueWork:number;contactsToday:number;interactions30d:number;connectedAffiliates:number;telegramConnected:number;openFollowups:number;overdueFollowups:number;connectionRate:number};
@@ -94,6 +96,7 @@ export class ApiClient {
   getMyWork(page = 1, pageSize = 100) { return this.read<MyWorkResponse>('getMyWork', { page, pageSize }); }
   getMyFollowups(page = 1, pageSize = 200) { return this.read<FollowupsResponse>('getMyFollowups', {page,pageSize}); }
   getMyInteractions(page = 1, pageSize = 500) { return this.read<InteractionsResponse>('getMyInteractions', {page,pageSize}); }
+  searchAffiliates(query:string,filters:Record<string,unknown>={}) { return this.read<AffiliateLookupResponse>('searchAffiliates',{query,limit:25,...filters}); }
   getSuperAdminDashboard() { return this.read<SuperAdminDashboard>('getSuperAdminDashboard'); }
   getStaffDashboard() { return this.read<StaffDashboard>('getStaffDashboard'); }
   getPerformanceWorkspace(period:string,filters:Record<string,unknown>={}) { return this.read<PerformanceWorkspace>('getPerformanceWorkspace',{period,...filters}); }
