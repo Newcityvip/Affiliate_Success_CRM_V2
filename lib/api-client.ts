@@ -46,6 +46,8 @@ export type IntelligenceAttention={id:string;severity:'CRITICAL'|'HIGH'|'MEDIUM'
 export type IntelligenceWorkspace={period:string;canManage:boolean;summaryText:string[];kpis:Record<string,number>;attention:IntelligenceAttention[];movement:{growing:PerformanceMovement[];declining:PerformanceMovement[];highestPnl:PerformanceMovement[];highestTurnover:PerformanceMovement[];highestDeposit:PerformanceMovement[];zeroActive:PerformanceMovement[];missing:PerformanceItem[];conflicts:PerformanceItem[]};trend:Array<{period:string;profitLoss:number;turnover:number;updated:number;dataConflicts:number}>;relationship:Record<string,number|null>;discipline:Record<string,number>;staff:Array<Record<string,string|number|null>>;options:PerformanceWorkspace['options']};
 export type PerformanceMovement={affiliateId:string;affiliateUsername:string;affiliateName:string;brandName:string;value:number;change:{direction:string;percent:number|null}|null;status:string;reasons:string[]};
 export type ReportsWorkspace={period:string;canManage:boolean;summary:Record<string,number>;affiliates:PerformanceItem[];staff:Array<Record<string,string|number>>;options:PerformanceWorkspace['options']};
+export type TeamStaffRow=Record<string,string|number|Record<string,number>>;
+export type TeamWorkspace={period:string;canManage:boolean;team:{teamId:string;teamName:string;teamCode:string;activeMembers:number};summary:Record<string,number>;ownSnapshot:TeamStaffRow|null;members:TeamStaffRow[];selectedStaff:(TeamStaffRow&{attention?:Array<{affiliateId:string;affiliateUsername:string;reason:string;href:string}>})|null;options:PerformanceWorkspace['options']};
 
 export class ApiError extends Error { constructor(message: string, public code = 'API_ERROR') { super(message); } }
 type ApiEnvelope<T> = { ok: boolean; data?: T; error?: { code: string; message: string } };
@@ -97,6 +99,7 @@ export class ApiClient {
   getPerformanceWorkspace(period:string,filters:Record<string,unknown>={}) { return this.read<PerformanceWorkspace>('getPerformanceWorkspace',{period,...filters}); }
   getIntelligenceWorkspace(period:string,filters:Record<string,unknown>={}) { return this.read<IntelligenceWorkspace>('getIntelligenceWorkspace',{period,...filters}); }
   getReportsWorkspace(period:string,filters:Record<string,unknown>={}) { return this.read<ReportsWorkspace>('getReportsWorkspace',{period,...filters}); }
+  getTeamWorkspace(period:string,filters:Record<string,unknown>={}) { return this.read<TeamWorkspace>('getTeamWorkspace',{period,...filters}); }
   saveAffiliatePerformance(payload:Record<string,unknown>) { return this.call<{performanceId:string;created:boolean;metrics:PerformanceMetrics}>('saveAffiliatePerformance',payload).then(result=>{invalidateReadCache('performance','intelligence','affiliate','staff-dashboard','super-admin-dashboard');return result}); }
   getTasks(page=1,pageSize=500) { return this.read<TasksResponse>('getTasks',{page,pageSize}); }
   getIssues(page=1,pageSize=500) { return this.read<IssuesResponse>('getIssues',{page,pageSize}); }
