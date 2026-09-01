@@ -1,32 +1,561 @@
-var INTELLIGENCE_OPEN_WORK_={PENDING:true,IN_PROGRESS:true,OVERDUE:true};
-var INTELLIGENCE_OPEN_FOLLOWUP_={PENDING:true,OPEN:true,IN_PROGRESS:true,OVERDUE:true};
-var INTELLIGENCE_OPEN_ISSUE_={OPEN:true,IN_PROGRESS:true};
-var INTELLIGENCE_SEVERITY_={CRITICAL:0,HIGH:1,MEDIUM:2,LOW:3,INFO:4};
-function intelligenceTime_(value){var n=value?new Date(value).getTime():NaN;return isFinite(n)?n:Infinity}
-function intelligenceRate_(numerator,denominator){return denominator>0?numerator/denominator*100:null}
-function intelligenceMonthOffset_(period,offset){var parts=period.split('-'),d=new Date(Date.UTC(Number(parts[0]),Number(parts[1])-1+offset,1));return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')}
-function intelligenceWorkspace_(user,p){
-  var period=performancePeriod_(p.period),admin=['ADMIN','SUPER_ADMIN'].indexOf(String(user.Role))>=0,performance=performanceWorkspace_(user,{period:period,staffId:admin?p.staffId:'',teamId:admin?p.teamId:'',brandId:admin?p.brandId:''}),now=Date.now(),affiliateIds={},assignmentIds={},staffIds={},itemsByAffiliate={},assignmentsByAffiliate={},affiliates={},brands={},staff={},teams={};
-  performance.items.forEach(function(x){affiliateIds[performanceIdPart_(x.affiliateId)]=true;staffIds[performanceIdPart_(x.staffId)]=true;itemsByAffiliate[performanceIdPart_(x.affiliateId)]=x});
-  rows_('Assignments').forEach(function(a){if(String(a.Status).trim().toUpperCase()==='ACTIVE'&&affiliateIds[performanceIdPart_(a.Affiliate_ID)]&&staffIds[performanceIdPart_(a.Staff_ID)]){assignmentsByAffiliate[performanceIdPart_(a.Affiliate_ID)]=a;assignmentIds[performanceIdPart_(a.Assignment_ID)]=true}});
-  rows_('Affiliates').forEach(function(a){if(affiliateIds[performanceIdPart_(a.Affiliate_ID)])affiliates[performanceIdPart_(a.Affiliate_ID)]=a});rows_('Brand_List').forEach(function(b){brands[performanceIdPart_(b.Brand_ID)]=b});rows_('Staff_List').forEach(function(s){staff[performanceIdPart_(s.Staff_ID)]=s});rows_('Team_List').forEach(function(t){teams[performanceIdPart_(t.Team_ID)]=t});
-  var scoped=function(row){return affiliateIds[performanceIdPart_(row.Affiliate_ID)]&&assignmentIds[performanceIdPart_(row.Assignment_ID)]},work=rows_('Work_Items').filter(scoped),followups=rows_('Followups').filter(scoped),tasks=rows_('Tasks').filter(scoped),issues=rows_('Issues').filter(function(x){return affiliateIds[performanceIdPart_(x.Affiliate_ID)]}),attempts=rows_('Contact_Attempts').filter(scoped),interactions=rows_('Interactions').filter(scoped),attention=[],discipline={openWork:0,overdueWork:0,completedWork:0,openFollowups:0,overdueFollowups:0,completedFollowups:0,openTasks:0,overdueTasks:0,completedTasks:0,openIssues:0},byStaff={};
-  function owner_(affiliateId){var a=assignmentsByAffiliate[performanceIdPart_(affiliateId)]||{},key=performanceIdPart_(a.Staff_ID),s=staff[key]||{};return byStaff[key]||(byStaff[key]={staffId:String(a.Staff_ID||''),staffName:String(s.Display_Name||s.Username||''),teamId:String(s.Team||''),teamName:String((teams[performanceIdPart_(s.Team)]||{}).Team_Name||''),managedAffiliates:0,overdueFollowups:0,overdueTasks:0,openIssues:0,lastActivityAt:''})}
-  Object.keys(assignmentsByAffiliate).forEach(function(k){owner_(k).managedAffiliates++});
-  function affiliateInfo_(affiliateId){var a=affiliates[performanceIdPart_(affiliateId)]||{},asn=assignmentsByAffiliate[performanceIdPart_(affiliateId)]||{},b=brands[performanceIdPart_(asn.Brand_ID||a.Brand_ID)]||{};return {affiliateId:String(a.Affiliate_ID||affiliateId),affiliateUsername:String(a.Affiliate_Username||''),affiliateName:String(a.Affiliate_Name||''),brandName:String(b.Brand_Name||b.Brand_Code||'')}}
-  function addAttention_(affiliateId,reason,severity,context,nextAction,href,dueAt){var info=affiliateInfo_(affiliateId);attention.push({id:reason+':'+info.affiliateId+':'+attention.length,severity:severity,reason:reason,context:String(context||''),nextAction:nextAction,href:href,affiliateId:info.affiliateId,affiliateUsername:info.affiliateUsername,affiliateName:info.affiliateName,brandName:info.brandName,dueAt:String(dueAt||'')})}
-  work.forEach(function(x){var open=Boolean(INTELLIGENCE_OPEN_WORK_[String(x.Status)]),due=intelligenceTime_(x.Due_At),overdue=open&&due<now,s=owner_(x.Affiliate_ID);if(open)discipline.openWork++;if(overdue){discipline.overdueWork++;addAttention_(x.Affiliate_ID,'OVERDUE_WORK',String(x.Priority)==='HIGH'?'HIGH':'MEDIUM',x.Title||x.Work_Type,'Open Work','/affiliates?workId='+encodeURIComponent(String(x.Work_ID)),x.Due_At)}if(String(x.Status)==='COMPLETED'&&performanceStoredPeriod_(x.Completed_At)===period)discipline.completedWork++;if(x.Completed_At&&intelligenceTime_(x.Completed_At)<Infinity&&(!s.lastActivityAt||intelligenceTime_(x.Completed_At)>intelligenceTime_(s.lastActivityAt)))s.lastActivityAt=String(x.Completed_At)});
-  followups.forEach(function(x){var open=Boolean(INTELLIGENCE_OPEN_FOLLOWUP_[String(x.Status)]),overdue=open&&intelligenceTime_(x.Due_At)<now,s=owner_(x.Affiliate_ID);if(open)discipline.openFollowups++;if(overdue){discipline.overdueFollowups++;s.overdueFollowups++;addAttention_(x.Affiliate_ID,'OVERDUE_FOLLOWUP',String(x.Priority)==='HIGH'?'HIGH':'MEDIUM',x.Followup_Type||'Follow-up','Complete Follow-up','/follow-ups',x.Due_At)}if(String(x.Status)==='COMPLETED'&&performanceStoredPeriod_(x.Completed_At)===period)discipline.completedFollowups++});
-  tasks.forEach(function(x){var open=String(x.Status)==='PENDING'||String(x.Status)==='IN_PROGRESS',overdue=open&&intelligenceTime_(x.Due_At)<now,s=owner_(x.Affiliate_ID);if(open)discipline.openTasks++;if(overdue){discipline.overdueTasks++;s.overdueTasks++;addAttention_(x.Affiliate_ID,'OVERDUE_TASK',String(x.Priority)==='HIGH'?'HIGH':'MEDIUM',x.Title||x.Task_Type,'Review Task','/tasks',x.Due_At)}if(String(x.Status)==='COMPLETED'&&performanceStoredPeriod_(x.Completed_At)===period)discipline.completedTasks++});
-  issues.forEach(function(x){if(!INTELLIGENCE_OPEN_ISSUE_[String(x.Status)])return;discipline.openIssues++;owner_(x.Affiliate_ID).openIssues++;if(['URGENT','HIGH'].indexOf(String(x.Priority))>=0)addAttention_(x.Affiliate_ID,'UNRESOLVED_'+String(x.Priority)+'_ISSUE',String(x.Priority)==='URGENT'?'CRITICAL':'HIGH',x.Title||x.Issue_Type,'Review Issue','/issues',x.Due_At||x.Reported_At)});
-  performance.items.forEach(function(x){if(x.status==='DATA_CONFLICT')addAttention_(x.affiliateId,'PERFORMANCE_DATA_CONFLICT','CRITICAL','Administrator review required','Open Performance','/performance?affiliateId='+encodeURIComponent(x.affiliateId),'');else if(x.status==='NOT_UPDATED')addAttention_(x.affiliateId,'PERFORMANCE_NOT_UPDATED','MEDIUM',x.performanceUpdateDue?'Selected month is missing and performance update is due':'Selected month is missing','Update Performance','/performance?affiliateId='+encodeURIComponent(x.affiliateId),x.updateDueAt);else{x.attentionReasons.forEach(function(reason){addAttention_(x.affiliateId,reason,reason==='ZERO_ACTIVE_PLAYERS'?'HIGH':'MEDIUM',reason==='PERFORMANCE_UPDATE_DUE'?'At least 30 days since the last successful performance update':reason==='ZERO_ACTIVE_PLAYERS'?'Active players fell from a positive value to zero':'At least 30% month-over-month decline','Open Affiliate','/affiliates?affiliateId='+encodeURIComponent(x.affiliateId),reason==='PERFORMANCE_UPDATE_DUE'?x.updateDueAt:'')})}});
-  attention.sort(function(a,b){return INTELLIGENCE_SEVERITY_[a.severity]-INTELLIGENCE_SEVERITY_[b.severity]||intelligenceTime_(a.dueAt)-intelligenceTime_(b.dueAt)||String(a.id).localeCompare(String(b.id))});
-  var movement=performance.items.filter(function(x){return x.metrics&&x.status!=='DATA_CONFLICT'}),growing=movement.filter(function(x){return x.comparisons.ftd&&x.comparisons.ftd.direction==='INCREASE'}),declining=movement.filter(function(x){return x.attentionReasons.some(function(r){return ['ACTIVE_PLAYERS_DOWN','FTD_DOWN','DEPOSIT_DOWN','TURNOVER_DOWN'].indexOf(r)>=0})}),zeroActive=movement.filter(function(x){return x.attentionReasons.indexOf('ZERO_ACTIVE_PLAYERS')>=0});
-  function top_(source,key,descending){return source.slice().sort(function(a,b){var av=a.metrics?Number(a.metrics[key])||0:0,bv=b.metrics?Number(b.metrics[key])||0:0;return descending?bv-av:av-bv}).slice(0,10).map(function(x){return {affiliateId:x.affiliateId,affiliateUsername:x.affiliateUsername,affiliateName:x.affiliateName,brandName:x.brandName,value:x.metrics?x.metrics[key]:0,change:x.comparisons[key]||null,status:x.status,reasons:x.attentionReasons}})}
-  function changeTop_(source,key,descending){return source.slice().sort(function(a,b){var av=a.comparisons[key]&&a.comparisons[key].percent,bv=b.comparisons[key]&&b.comparisons[key].percent;av=av===null||av===undefined?0:av;bv=bv===null||bv===undefined?0:bv;return descending?bv-av:av-bv}).slice(0,10).map(function(x){return {affiliateId:x.affiliateId,affiliateUsername:x.affiliateUsername,affiliateName:x.affiliateName,brandName:x.brandName,value:x.metrics?x.metrics[key]:0,change:x.comparisons[key]||null,status:x.status,reasons:x.attentionReasons}})}
-  var groups=performanceIndexCached_(),months=[];for(var offset=-5;offset<=0;offset++){var month=intelligenceMonthOffset_(period,offset),totals={period:month,profitLoss:0,turnover:0,updated:0,dataConflicts:0};Object.keys(assignmentsByAffiliate).forEach(function(k){var a=assignmentsByAffiliate[k],affiliate=affiliates[k]||{},group=performanceGroup_(groups,affiliate.Affiliate_ID,a.Brand_ID||affiliate.Brand_ID,month);if(group.length>1)totals.dataConflicts++;else if(group.length===1){var metrics=performanceMetrics_(group[0]);totals.updated++;totals.profitLoss+=metrics.profitLoss;totals.turnover+=metrics.totalTurnover}});months.push(totals)}
-  var relationship={newAssigned:0,contacting:0,callbackRetry:0,connected:0,telegramConnected:0,replacementPending:0,contacted:0};Object.keys(affiliates).forEach(function(k){var a=affiliates[k],stage=typeof dashboardPipeline_==='function'?dashboardPipeline_(a):'NEW_ASSIGNED';if(stage==='NEW_ASSIGNED')relationship.newAssigned++;if(stage==='CONTACTING')relationship.contacting++;if(stage==='CALLBACK_RETRY')relationship.callbackRetry++;if(stage==='CONNECTED')relationship.connected++;if(stage==='TELEGRAM_CONNECTED')relationship.telegramConnected++;if(String(a.Prospect_Status)==='REPLACEMENT_PENDING'||String(a.Lifecycle_Status)==='REPLACEMENT_REQUIRED')relationship.replacementPending++});var contacted={};attempts.forEach(function(x){contacted[performanceIdPart_(x.Affiliate_ID)]=true});interactions.forEach(function(x){contacted[performanceIdPart_(x.Affiliate_ID)]=true;var s=owner_(x.Affiliate_ID),at=String(x.Interaction_At||x.Created_At||'');if(at&&(!s.lastActivityAt||intelligenceTime_(at)>intelligenceTime_(s.lastActivityAt)))s.lastActivityAt=at});relationship.contacted=Object.keys(contacted).length;relationship.assignedToContactedRate=intelligenceRate_(relationship.contacted,performance.summary.assignedAffiliates);relationship.contactedToConnectedRate=intelligenceRate_(relationship.connected+relationship.telegramConnected,relationship.contacted);relationship.connectedToTelegramRate=intelligenceRate_(relationship.telegramConnected,relationship.connected+relationship.telegramConnected);
-  var staffComparison=admin?performance.staff.map(function(x){var op=byStaff[performanceIdPart_(x.staffId)]||{};return Object.assign({},x,{overdueFollowups:op.overdueFollowups||0,overdueTasks:op.overdueTasks||0,openIssues:op.openIssues||0,lastActivityAt:op.lastActivityAt||'',attentionRate:intelligenceRate_(x.needsAttention,x.assignedAffiliates),ftdRate:intelligenceRate_(x.ftd,x.registeredUsers),activePlayerRate:intelligenceRate_(x.activePlayers,x.registeredUsers)})}):[];
-  var activeStaff=Object.keys(staffIds).filter(function(k){return staff[k]&&staff[k].Status==='ACTIVE'}).length,critical=attention.filter(function(x){return x.severity==='CRITICAL'||x.severity==='HIGH'}).length,summaryText=[critical+' affiliate signal'+(critical===1?'':'s')+' require immediate attention.', 'Performance updates are complete for '+performance.summary.updated+' of '+performance.summary.assignedAffiliates+' affiliates.',performance.summary.updateDue+' performance update'+(performance.summary.updateDue===1?' is':'s are')+' due.'];if(performance.summary.dataConflicts)summaryText.push(performance.summary.dataConflicts+' performance conflict'+(performance.summary.dataConflicts===1?' requires':'s require')+' administrator review.');
-  return {period:period,canManage:admin,summaryText:summaryText,kpis:{managedAffiliates:performance.summary.assignedAffiliates,performanceUpdated:performance.summary.updated,performanceMissing:performance.items.filter(function(x){return x.status==='NOT_UPDATED'}).length,performanceConflicts:performance.summary.dataConflicts,affiliatesNeedingAttention:performance.summary.needsAttention,growingAffiliates:growing.length,decliningAffiliates:declining.length,zeroActiveAffiliates:zeroActive.length,openFollowups:discipline.openFollowups,overdueFollowups:discipline.overdueFollowups,openTasks:discipline.openTasks,overdueTasks:discipline.overdueTasks,openIssues:discipline.openIssues,activeStaff:activeStaff,overdueWork:discipline.overdueWork},attention:attention.slice(0,100),movement:{growing:changeTop_(growing,'ftd',true),declining:changeTop_(declining,'ftd',false),highestPnl:top_(movement,'profitLoss',true),highestTurnover:top_(movement,'totalTurnover',true),highestDeposit:top_(movement,'totalDeposit',true),zeroActive:top_(zeroActive,'activePlayers',false),missing:performance.items.filter(function(x){return x.status==='NOT_UPDATED'}).slice(0,50),conflicts:performance.items.filter(function(x){return x.status==='DATA_CONFLICT'}).slice(0,50)},trend:months,relationship:relationship,discipline:discipline,staff:staffComparison,options:performance.options};
+var INTELLIGENCE_OPEN_WORK_ = {
+  PENDING: true,
+  IN_PROGRESS: true,
+  OVERDUE: true,
+};
+var INTELLIGENCE_OPEN_FOLLOWUP_ = {
+  PENDING: true,
+  OPEN: true,
+  IN_PROGRESS: true,
+  OVERDUE: true,
+};
+var INTELLIGENCE_OPEN_ISSUE_ = { OPEN: true, IN_PROGRESS: true };
+var INTELLIGENCE_SEVERITY_ = {
+  CRITICAL: 0,
+  HIGH: 1,
+  MEDIUM: 2,
+  LOW: 3,
+  INFO: 4,
+};
+function intelligenceTime_(value) {
+  var n = value ? new Date(value).getTime() : NaN;
+  return isFinite(n) ? n : Infinity;
+}
+function intelligenceRate_(numerator, denominator) {
+  return denominator > 0 ? (numerator / denominator) * 100 : null;
+}
+function intelligenceMonthOffset_(period, offset) {
+  var parts = period.split("-"),
+    d = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1 + offset, 1));
+  return (
+    d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0")
+  );
+}
+function intelligenceWorkspace_(user, p) {
+  var period = performancePeriod_(p.period),
+    admin = ["ADMIN", "SUPER_ADMIN"].indexOf(String(user.Role)) >= 0,
+    performance = performanceWorkspace_(user, {
+      period: period,
+      staffId: admin ? p.staffId : "",
+      teamId: admin ? p.teamId : "",
+      brandId: admin ? p.brandId : "",
+    }),
+    now = Date.now(),
+    affiliateIds = {},
+    assignmentIds = {},
+    staffIds = {},
+    itemsByAffiliate = {},
+    assignmentsByAffiliate = {},
+    affiliates = {},
+    brands = {},
+    staff = {},
+    teams = {};
+  performance.items.forEach(function (x) {
+    affiliateIds[performanceIdPart_(x.affiliateId)] = true;
+    staffIds[performanceIdPart_(x.staffId)] = true;
+    itemsByAffiliate[performanceIdPart_(x.affiliateId)] = x;
+  });
+  rows_("Assignments").forEach(function (a) {
+    if (
+      String(a.Status).trim().toUpperCase() === "ACTIVE" &&
+      affiliateIds[performanceIdPart_(a.Affiliate_ID)] &&
+      staffIds[performanceIdPart_(a.Staff_ID)]
+    ) {
+      assignmentsByAffiliate[performanceIdPart_(a.Affiliate_ID)] = a;
+      assignmentIds[performanceIdPart_(a.Assignment_ID)] = true;
+    }
+  });
+  rows_("Affiliates").forEach(function (a) {
+    if (affiliateIds[performanceIdPart_(a.Affiliate_ID)])
+      affiliates[performanceIdPart_(a.Affiliate_ID)] = a;
+  });
+  rows_("Brand_List").forEach(function (b) {
+    brands[performanceIdPart_(b.Brand_ID)] = b;
+  });
+  rows_("Staff_List").forEach(function (s) {
+    staff[performanceIdPart_(s.Staff_ID)] = s;
+  });
+  rows_("Team_List").forEach(function (t) {
+    teams[performanceIdPart_(t.Team_ID)] = t;
+  });
+  var scoped = function (row) {
+      return (
+        affiliateIds[performanceIdPart_(row.Affiliate_ID)] &&
+        assignmentIds[performanceIdPart_(row.Assignment_ID)]
+      );
+    },
+    work = rows_("Work_Items").filter(scoped),
+    followups = rows_("Followups").filter(scoped),
+    tasks = rows_("Tasks").filter(scoped),
+    issues = rows_("Issues").filter(function (x) {
+      return affiliateIds[performanceIdPart_(x.Affiliate_ID)];
+    }),
+    attempts = rows_("Contact_Attempts").filter(scoped),
+    interactions = rows_("Interactions").filter(scoped),
+    attention = [],
+    discipline = {
+      openWork: 0,
+      overdueWork: 0,
+      completedWork: 0,
+      openFollowups: 0,
+      overdueFollowups: 0,
+      completedFollowups: 0,
+      openTasks: 0,
+      overdueTasks: 0,
+      completedTasks: 0,
+      openIssues: 0,
+    },
+    byStaff = {};
+  function owner_(affiliateId) {
+    var a = assignmentsByAffiliate[performanceIdPart_(affiliateId)] || {},
+      key = performanceIdPart_(a.Staff_ID),
+      s = staff[key] || {};
+    return (
+      byStaff[key] ||
+      (byStaff[key] = {
+        staffId: String(a.Staff_ID || ""),
+        staffName: String(s.Display_Name || s.Username || ""),
+        teamId: String(s.Team || ""),
+        teamName: String(
+          (teams[performanceIdPart_(s.Team)] || {}).Team_Name || "",
+        ),
+        managedAffiliates: 0,
+        overdueFollowups: 0,
+        overdueTasks: 0,
+        openIssues: 0,
+        lastActivityAt: "",
+      })
+    );
+  }
+  Object.keys(assignmentsByAffiliate).forEach(function (k) {
+    owner_(k).managedAffiliates++;
+  });
+  function affiliateInfo_(affiliateId) {
+    var a = affiliates[performanceIdPart_(affiliateId)] || {},
+      asn = assignmentsByAffiliate[performanceIdPart_(affiliateId)] || {},
+      b = brands[performanceIdPart_(asn.Brand_ID || a.Brand_ID)] || {};
+    return {
+      affiliateId: String(a.Affiliate_ID || affiliateId),
+      affiliateUsername: String(a.Affiliate_Username || ""),
+      affiliateName: String(a.Affiliate_Name || ""),
+      brandName: String(b.Brand_Name || b.Brand_Code || ""),
+    };
+  }
+  function addAttention_(
+    affiliateId,
+    reason,
+    severity,
+    context,
+    nextAction,
+    href,
+    dueAt,
+  ) {
+    var info = affiliateInfo_(affiliateId);
+    attention.push({
+      id: reason + ":" + info.affiliateId + ":" + attention.length,
+      severity: severity,
+      reason: reason,
+      context: String(context || ""),
+      nextAction: nextAction,
+      href: href,
+      affiliateId: info.affiliateId,
+      affiliateUsername: info.affiliateUsername,
+      affiliateName: info.affiliateName,
+      brandName: info.brandName,
+      dueAt: String(dueAt || ""),
+    });
+  }
+  work.forEach(function (x) {
+    var open = Boolean(INTELLIGENCE_OPEN_WORK_[String(x.Status)]),
+      due = intelligenceTime_(x.Due_At),
+      overdue = open && due < now,
+      s = owner_(x.Affiliate_ID);
+    if (open) discipline.openWork++;
+    if (overdue) {
+      discipline.overdueWork++;
+      addAttention_(
+        x.Affiliate_ID,
+        "OVERDUE_WORK",
+        String(x.Priority) === "HIGH" ? "HIGH" : "MEDIUM",
+        x.Title || x.Work_Type,
+        "Open Work",
+        performance.canManage
+          ? "/affiliates?affiliateId=" +
+              encodeURIComponent(String(x.Affiliate_ID))
+          : "/affiliates?workId=" + encodeURIComponent(String(x.Work_ID)),
+        x.Due_At,
+      );
+    }
+    if (
+      String(x.Status) === "COMPLETED" &&
+      performanceStoredPeriod_(x.Completed_At) === period
+    )
+      discipline.completedWork++;
+    if (
+      x.Completed_At &&
+      intelligenceTime_(x.Completed_At) < Infinity &&
+      (!s.lastActivityAt ||
+        intelligenceTime_(x.Completed_At) > intelligenceTime_(s.lastActivityAt))
+    )
+      s.lastActivityAt = String(x.Completed_At);
+  });
+  followups.forEach(function (x) {
+    var open = Boolean(INTELLIGENCE_OPEN_FOLLOWUP_[String(x.Status)]),
+      overdue = open && intelligenceTime_(x.Due_At) < now,
+      s = owner_(x.Affiliate_ID);
+    if (open) discipline.openFollowups++;
+    if (overdue) {
+      discipline.overdueFollowups++;
+      s.overdueFollowups++;
+      addAttention_(
+        x.Affiliate_ID,
+        "OVERDUE_FOLLOWUP",
+        String(x.Priority) === "HIGH" ? "HIGH" : "MEDIUM",
+        x.Followup_Type || "Follow-up",
+        "Complete Follow-up",
+        "/follow-ups",
+        x.Due_At,
+      );
+    }
+    if (
+      String(x.Status) === "COMPLETED" &&
+      performanceStoredPeriod_(x.Completed_At) === period
+    )
+      discipline.completedFollowups++;
+  });
+  tasks.forEach(function (x) {
+    var open =
+        String(x.Status) === "PENDING" || String(x.Status) === "IN_PROGRESS",
+      overdue = open && intelligenceTime_(x.Due_At) < now,
+      s = owner_(x.Affiliate_ID);
+    if (open) discipline.openTasks++;
+    if (overdue) {
+      discipline.overdueTasks++;
+      s.overdueTasks++;
+      addAttention_(
+        x.Affiliate_ID,
+        "OVERDUE_TASK",
+        String(x.Priority) === "HIGH" ? "HIGH" : "MEDIUM",
+        x.Title || x.Task_Type,
+        "Review Task",
+        "/tasks",
+        x.Due_At,
+      );
+    }
+    if (
+      String(x.Status) === "COMPLETED" &&
+      performanceStoredPeriod_(x.Completed_At) === period
+    )
+      discipline.completedTasks++;
+  });
+  issues.forEach(function (x) {
+    if (!INTELLIGENCE_OPEN_ISSUE_[String(x.Status)]) return;
+    discipline.openIssues++;
+    owner_(x.Affiliate_ID).openIssues++;
+    if (["URGENT", "HIGH"].indexOf(String(x.Priority)) >= 0)
+      addAttention_(
+        x.Affiliate_ID,
+        "UNRESOLVED_" + String(x.Priority) + "_ISSUE",
+        String(x.Priority) === "URGENT" ? "CRITICAL" : "HIGH",
+        x.Title || x.Issue_Type,
+        "Review Issue",
+        "/issues",
+        x.Due_At || x.Reported_At,
+      );
+  });
+  performance.items.forEach(function (x) {
+    if (x.status === "DATA_CONFLICT")
+      addAttention_(
+        x.affiliateId,
+        "PERFORMANCE_DATA_CONFLICT",
+        "CRITICAL",
+        "Administrator review required",
+        "Open Performance",
+        "/performance?affiliateId=" + encodeURIComponent(x.affiliateId),
+        "",
+      );
+    else if (x.status === "NOT_UPDATED")
+      addAttention_(
+        x.affiliateId,
+        "PERFORMANCE_NOT_UPDATED",
+        "MEDIUM",
+        x.performanceUpdateDue
+          ? "Selected month is missing and performance update is due"
+          : "Selected month is missing",
+        "Update Performance",
+        "/performance?affiliateId=" + encodeURIComponent(x.affiliateId),
+        x.updateDueAt,
+      );
+    else {
+      x.attentionReasons.forEach(function (reason) {
+        addAttention_(
+          x.affiliateId,
+          reason,
+          reason === "ZERO_ACTIVE_PLAYERS" ? "HIGH" : "MEDIUM",
+          reason === "PERFORMANCE_UPDATE_DUE"
+            ? "At least 30 days since the last successful performance update"
+            : reason === "ZERO_ACTIVE_PLAYERS"
+              ? "Active players fell from a positive value to zero"
+              : "At least 30% month-over-month decline",
+          "Open Affiliate",
+          "/affiliates?affiliateId=" + encodeURIComponent(x.affiliateId),
+          reason === "PERFORMANCE_UPDATE_DUE" ? x.updateDueAt : "",
+        );
+      });
+    }
+  });
+  attention.sort(function (a, b) {
+    return (
+      INTELLIGENCE_SEVERITY_[a.severity] - INTELLIGENCE_SEVERITY_[b.severity] ||
+      intelligenceTime_(a.dueAt) - intelligenceTime_(b.dueAt) ||
+      String(a.id).localeCompare(String(b.id))
+    );
+  });
+  var movement = performance.items.filter(function (x) {
+      return x.metrics && x.status !== "DATA_CONFLICT";
+    }),
+    growing = movement.filter(function (x) {
+      return x.comparisons.ftd && x.comparisons.ftd.direction === "INCREASE";
+    }),
+    declining = movement.filter(function (x) {
+      return x.attentionReasons.some(function (r) {
+        return (
+          [
+            "ACTIVE_PLAYERS_DOWN",
+            "FTD_DOWN",
+            "DEPOSIT_DOWN",
+            "TURNOVER_DOWN",
+          ].indexOf(r) >= 0
+        );
+      });
+    }),
+    zeroActive = movement.filter(function (x) {
+      return x.attentionReasons.indexOf("ZERO_ACTIVE_PLAYERS") >= 0;
+    });
+  function top_(source, key, descending) {
+    return source
+      .slice()
+      .sort(function (a, b) {
+        var av = a.metrics ? Number(a.metrics[key]) || 0 : 0,
+          bv = b.metrics ? Number(b.metrics[key]) || 0 : 0;
+        return descending ? bv - av : av - bv;
+      })
+      .slice(0, 10)
+      .map(function (x) {
+        return {
+          affiliateId: x.affiliateId,
+          affiliateUsername: x.affiliateUsername,
+          affiliateName: x.affiliateName,
+          brandName: x.brandName,
+          value: x.metrics ? x.metrics[key] : 0,
+          change: x.comparisons[key] || null,
+          status: x.status,
+          reasons: x.attentionReasons,
+        };
+      });
+  }
+  function changeTop_(source, key, descending) {
+    return source
+      .slice()
+      .sort(function (a, b) {
+        var av = a.comparisons[key] && a.comparisons[key].percent,
+          bv = b.comparisons[key] && b.comparisons[key].percent;
+        av = av === null || av === undefined ? 0 : av;
+        bv = bv === null || bv === undefined ? 0 : bv;
+        return descending ? bv - av : av - bv;
+      })
+      .slice(0, 10)
+      .map(function (x) {
+        return {
+          affiliateId: x.affiliateId,
+          affiliateUsername: x.affiliateUsername,
+          affiliateName: x.affiliateName,
+          brandName: x.brandName,
+          value: x.metrics ? x.metrics[key] : 0,
+          change: x.comparisons[key] || null,
+          status: x.status,
+          reasons: x.attentionReasons,
+        };
+      });
+  }
+  var groups = performanceIndexCached_(),
+    months = [];
+  for (var offset = -5; offset <= 0; offset++) {
+    var month = intelligenceMonthOffset_(period, offset),
+      totals = {
+        period: month,
+        profitLoss: 0,
+        turnover: 0,
+        updated: 0,
+        dataConflicts: 0,
+      };
+    Object.keys(assignmentsByAffiliate).forEach(function (k) {
+      var a = assignmentsByAffiliate[k],
+        affiliate = affiliates[k] || {},
+        group = performanceGroup_(
+          groups,
+          affiliate.Affiliate_ID,
+          a.Brand_ID || affiliate.Brand_ID,
+          month,
+        );
+      if (group.length > 1) totals.dataConflicts++;
+      else if (group.length === 1) {
+        var metrics = performanceMetrics_(group[0]);
+        totals.updated++;
+        totals.profitLoss += metrics.profitLoss;
+        totals.turnover += metrics.totalTurnover;
+      }
+    });
+    months.push(totals);
+  }
+  var relationship = {
+    newAssigned: 0,
+    contacting: 0,
+    callbackRetry: 0,
+    connected: 0,
+    telegramConnected: 0,
+    replacementPending: 0,
+    contacted: 0,
+  };
+  Object.keys(affiliates).forEach(function (k) {
+    var a = affiliates[k],
+      stage =
+        typeof dashboardPipeline_ === "function"
+          ? dashboardPipeline_(a)
+          : "NEW_ASSIGNED";
+    if (stage === "NEW_ASSIGNED") relationship.newAssigned++;
+    if (stage === "CONTACTING") relationship.contacting++;
+    if (stage === "CALLBACK_RETRY") relationship.callbackRetry++;
+    if (stage === "CONNECTED") relationship.connected++;
+    if (stage === "TELEGRAM_CONNECTED") relationship.telegramConnected++;
+    if (
+      String(a.Prospect_Status) === "REPLACEMENT_PENDING" ||
+      String(a.Lifecycle_Status) === "REPLACEMENT_REQUIRED"
+    )
+      relationship.replacementPending++;
+  });
+  var contacted = {};
+  attempts.forEach(function (x) {
+    contacted[performanceIdPart_(x.Affiliate_ID)] = true;
+  });
+  interactions.forEach(function (x) {
+    contacted[performanceIdPart_(x.Affiliate_ID)] = true;
+    var s = owner_(x.Affiliate_ID),
+      at = String(x.Interaction_At || x.Created_At || "");
+    if (
+      at &&
+      (!s.lastActivityAt ||
+        intelligenceTime_(at) > intelligenceTime_(s.lastActivityAt))
+    )
+      s.lastActivityAt = at;
+  });
+  relationship.contacted = Object.keys(contacted).length;
+  relationship.assignedToContactedRate = intelligenceRate_(
+    relationship.contacted,
+    performance.summary.assignedAffiliates,
+  );
+  relationship.contactedToConnectedRate = intelligenceRate_(
+    relationship.connected + relationship.telegramConnected,
+    relationship.contacted,
+  );
+  relationship.connectedToTelegramRate = intelligenceRate_(
+    relationship.telegramConnected,
+    relationship.connected + relationship.telegramConnected,
+  );
+  var staffComparison = admin
+    ? performance.staff.map(function (x) {
+        var op = byStaff[performanceIdPart_(x.staffId)] || {};
+        return Object.assign({}, x, {
+          overdueFollowups: op.overdueFollowups || 0,
+          overdueTasks: op.overdueTasks || 0,
+          openIssues: op.openIssues || 0,
+          lastActivityAt: op.lastActivityAt || "",
+          attentionRate: intelligenceRate_(
+            x.needsAttention,
+            x.assignedAffiliates,
+          ),
+          ftdRate: intelligenceRate_(x.ftd, x.registeredUsers),
+          activePlayerRate: intelligenceRate_(
+            x.activePlayers,
+            x.registeredUsers,
+          ),
+        });
+      })
+    : [];
+  var activeStaff = Object.keys(staffIds).filter(function (k) {
+      return staff[k] && staff[k].Status === "ACTIVE";
+    }).length,
+    critical = attention.filter(function (x) {
+      return x.severity === "CRITICAL" || x.severity === "HIGH";
+    }).length,
+    summaryText = [
+      critical +
+        " affiliate signal" +
+        (critical === 1 ? "" : "s") +
+        " require immediate attention.",
+      "Performance updates are complete for " +
+        performance.summary.updated +
+        " of " +
+        performance.summary.assignedAffiliates +
+        " affiliates.",
+      performance.summary.updateDue +
+        " performance update" +
+        (performance.summary.updateDue === 1 ? " is" : "s are") +
+        " due.",
+    ];
+  if (performance.summary.dataConflicts)
+    summaryText.push(
+      performance.summary.dataConflicts +
+        " performance conflict" +
+        (performance.summary.dataConflicts === 1 ? " requires" : "s require") +
+        " administrator review.",
+    );
+  return {
+    period: period,
+    canManage: admin,
+    summaryText: summaryText,
+    kpis: {
+      managedAffiliates: performance.summary.assignedAffiliates,
+      performanceUpdated: performance.summary.updated,
+      performanceMissing: performance.items.filter(function (x) {
+        return x.status === "NOT_UPDATED";
+      }).length,
+      performanceConflicts: performance.summary.dataConflicts,
+      affiliatesNeedingAttention: performance.summary.needsAttention,
+      growingAffiliates: growing.length,
+      decliningAffiliates: declining.length,
+      zeroActiveAffiliates: zeroActive.length,
+      openFollowups: discipline.openFollowups,
+      overdueFollowups: discipline.overdueFollowups,
+      openTasks: discipline.openTasks,
+      overdueTasks: discipline.overdueTasks,
+      openIssues: discipline.openIssues,
+      activeStaff: activeStaff,
+      overdueWork: discipline.overdueWork,
+    },
+    attention: attention.slice(0, 100),
+    movement: {
+      growing: changeTop_(growing, "ftd", true),
+      declining: changeTop_(declining, "ftd", false),
+      highestPnl: top_(movement, "profitLoss", true),
+      highestTurnover: top_(movement, "totalTurnover", true),
+      highestDeposit: top_(movement, "totalDeposit", true),
+      zeroActive: top_(zeroActive, "activePlayers", false),
+      missing: performance.items
+        .filter(function (x) {
+          return x.status === "NOT_UPDATED";
+        })
+        .slice(0, 50),
+      conflicts: performance.items
+        .filter(function (x) {
+          return x.status === "DATA_CONFLICT";
+        })
+        .slice(0, 50),
+    },
+    trend: months,
+    relationship: relationship,
+    discipline: discipline,
+    staff: staffComparison,
+    options: performance.options,
+  };
 }

@@ -1,13 +1,259 @@
-function interactionAdmin_(user){return ['ADMIN','SUPER_ADMIN'].indexOf(String(user.Role))>=0}
-function interactionTime_(row,primary){var value=row[primary]||row.Created_At||'',date=value instanceof Date?value:new Date(value);return value&&!isNaN(date.getTime())?date.toISOString():''}
-function interactionMaps_(){var build=function(){var affiliateById={},brandById={},staffById={},teamById={},assignments=[];rows_('Affiliates').forEach(function(row){affiliateById[String(row.Affiliate_ID)]=row});rows_('Brand_List').forEach(function(row){brandById[String(row.Brand_ID)]=row});rows_('Staff_List').forEach(function(row){staffById[String(row.Staff_ID)]=row});rows_('Team_List').forEach(function(row){teamById[String(row.Team_ID)]=row});rows_('Assignments').forEach(function(row){if(String(row.Status)==='ACTIVE')assignments.push(row)});return {affiliateById:affiliateById,brandById:brandById,staffById:staffById,teamById:teamById,assignments:assignments}};return typeof requestMemo_==='function'?requestMemo_('interactions:maps',build):build()}
-function myInteractions_(user,p){
-  p=p||{};var admin=interactionAdmin_(user),staffId=String(user.Staff_ID),m=interactionMaps_(),activeByAffiliate={},authorizedAssignments={},interactionWork={};
-  m.assignments.forEach(function(a){var owner=m.staffById[String(a.Staff_ID)]||{},affiliate=m.affiliateById[String(a.Affiliate_ID)]||{},brandId=String(a.Brand_ID||affiliate.Brand_ID||'');if(!admin&&String(a.Staff_ID)!==staffId)return;if(admin&&p.staffId&&String(a.Staff_ID)!==String(p.staffId))return;if(admin&&p.teamId&&String(owner.Team)!==String(p.teamId))return;if(admin&&p.brandId&&brandId!==String(p.brandId))return;if(admin&&p.affiliateId&&String(a.Affiliate_ID)!==String(p.affiliateId))return;activeByAffiliate[String(a.Affiliate_ID)]=a;authorizedAssignments[String(a.Assignment_ID)]=true});
-  function visible_(row){var affiliateId=String(row.Affiliate_ID||''),assignmentId=String(row.Assignment_ID||''),active=activeByAffiliate[affiliateId];if(!active||!m.affiliateById[affiliateId])return false;if(assignmentId)return Boolean(authorizedAssignments[assignmentId]);return admin||String(row.Staff_ID||'')===staffId}
-  var interactions=rows_('Interactions').filter(visible_),attempts=rows_('Contact_Attempts').filter(visible_);interactions.forEach(function(row){if(row.Work_ID)interactionWork[String(row.Work_ID)]=true});
-  function enrich_(row,isAttempt){var affiliateId=String(row.Affiliate_ID),assignment=activeByAffiliate[affiliateId],affiliate=m.affiliateById[affiliateId],actor=m.staffById[String(row.Staff_ID)]||{},brand=m.brandById[String(assignment.Brand_ID||affiliate.Brand_ID)]||{};return {id:String(isAttempt?row.Attempt_ID:row.Interaction_ID),affiliateId:affiliateId,affiliateUsername:String(affiliate.Affiliate_Username||''),affiliateName:String(affiliate.Affiliate_Name||''),brandName:String(brand.Brand_Name||''),brandCode:String(brand.Brand_Code||''),type:String(isAttempt?'CONTACT_ATTEMPT':row.Interaction_Type||'INTERACTION'),channel:String(row.Channel||''),outcome:String(isAttempt?row.Result||'':row.Outcome||''),timestamp:interactionTime_(row,isAttempt?'Attempt_At':'Interaction_At'),staffName:String(actor.Display_Name||actor.Username||''),notes:String(row.Notes||''),summary:String(isAttempt?row.Result_Detail||'':row.Interaction_Type||''),followupRequired:isAttempt?Boolean(row.Callback_Required):Boolean(row.Followup_Required)}}
-  var candidates=interactions.map(function(row){return {row:row,isAttempt:false,time:interactionSortTime_(interactionTime_(row,'Interaction_At')),id:String(row.Interaction_ID)}});attempts.forEach(function(row){if(row.Work_ID&&interactionWork[String(row.Work_ID)])return;candidates.push({row:row,isAttempt:true,time:interactionSortTime_(interactionTime_(row,'Attempt_At')),id:String(row.Attempt_ID)})});candidates.sort(function(a,b){return b.time-a.time||b.id.localeCompare(a.id)});var size=Math.max(1,Math.min(Number(p.pageSize)||500,500)),page=Math.max(1,Number(p.page)||1),start=(page-1)*size,items=candidates.slice(start,start+size).map(function(item){return enrich_(item.row,item.isAttempt)});return {items:items,page:page,pageSize:size,total:candidates.length};
+function interactionAdmin_(user) {
+  return ["ADMIN", "SUPER_ADMIN"].indexOf(String(user.Role)) >= 0;
 }
-function interactionSortTime_(value){var time=value?new Date(value).getTime():NaN;return isFinite(time)?time:0}
-function interactionTodayCount_(user,nowMs){var m=interactionMaps_(),staffId=String(user.Staff_ID),affiliates={},assignments={},interactionWork={},count=0,today=new Date(nowMs);m.assignments.forEach(function(row){if(String(row.Staff_ID)===staffId){affiliates[String(row.Affiliate_ID)]=true;assignments[String(row.Assignment_ID)]=true}});function visible_(row){var affiliateId=String(row.Affiliate_ID||''),assignmentId=String(row.Assignment_ID||'');return Boolean(affiliates[affiliateId]&&(assignmentId?assignments[assignmentId]:String(row.Staff_ID||'')===staffId))}function today_(row,field){var value=interactionTime_(row,field);if(!value)return false;var date=new Date(value);return date.getFullYear()===today.getFullYear()&&date.getMonth()===today.getMonth()&&date.getDate()===today.getDate()}rows_('Interactions').forEach(function(row){if(!visible_(row))return;if(row.Work_ID)interactionWork[String(row.Work_ID)]=true;if(today_(row,'Interaction_At'))count++});rows_('Contact_Attempts').forEach(function(row){if(!visible_(row)||row.Work_ID&&interactionWork[String(row.Work_ID)])return;if(today_(row,'Attempt_At'))count++});return count}
+function interactionTime_(row, primary) {
+  var value = row[primary] || row.Created_At || "",
+    date = value instanceof Date ? value : new Date(value);
+  return value && !isNaN(date.getTime()) ? date.toISOString() : "";
+}
+function interactionMaps_() {
+  var build = function () {
+    var affiliateById = {},
+      brandById = {},
+      staffById = {},
+      teamById = {},
+      assignments = [];
+    rows_("Affiliates").forEach(function (row) {
+      affiliateById[String(row.Affiliate_ID)] = row;
+    });
+    rows_("Brand_List").forEach(function (row) {
+      brandById[String(row.Brand_ID)] = row;
+    });
+    rows_("Staff_List").forEach(function (row) {
+      staffById[String(row.Staff_ID)] = row;
+    });
+    rows_("Team_List").forEach(function (row) {
+      teamById[String(row.Team_ID)] = row;
+    });
+    rows_("Assignments").forEach(function (row) {
+      if (String(row.Status) === "ACTIVE") assignments.push(row);
+    });
+    return {
+      affiliateById: affiliateById,
+      brandById: brandById,
+      staffById: staffById,
+      teamById: teamById,
+      assignments: assignments,
+    };
+  };
+  return typeof requestMemo_ === "function"
+    ? requestMemo_("interactions:maps", build)
+    : build();
+}
+function myInteractions_(user, p) {
+  p = p || {};
+  var admin = interactionAdmin_(user),
+    staffId = String(user.Staff_ID),
+    m = interactionMaps_(),
+    activeByAffiliate = {},
+    authorizedAssignments = {},
+    interactionWork = {};
+  m.assignments.forEach(function (a) {
+    var owner = m.staffById[String(a.Staff_ID)] || {},
+      affiliate = m.affiliateById[String(a.Affiliate_ID)] || {},
+      brandId = String(a.Brand_ID || affiliate.Brand_ID || "");
+    if (!admin && String(a.Staff_ID) !== staffId) return;
+    if (admin && p.staffId && String(a.Staff_ID) !== String(p.staffId)) return;
+    if (admin && p.teamId && String(owner.Team) !== String(p.teamId)) return;
+    if (admin && p.brandId && brandId !== String(p.brandId)) return;
+    if (
+      admin &&
+      p.affiliateId &&
+      String(a.Affiliate_ID) !== String(p.affiliateId)
+    )
+      return;
+    activeByAffiliate[String(a.Affiliate_ID)] = a;
+    authorizedAssignments[String(a.Assignment_ID)] = true;
+  });
+  function visible_(row) {
+    var affiliateId = String(row.Affiliate_ID || ""),
+      assignmentId = String(row.Assignment_ID || ""),
+      active = activeByAffiliate[affiliateId];
+    if (!active || !m.affiliateById[affiliateId]) return false;
+    if (assignmentId) return Boolean(authorizedAssignments[assignmentId]);
+    return admin || String(row.Staff_ID || "") === staffId;
+  }
+  var interactions = rows_("Interactions").filter(visible_),
+    attempts = rows_("Contact_Attempts").filter(visible_);
+  interactions.forEach(function (row) {
+    if (row.Work_ID) interactionWork[String(row.Work_ID)] = true;
+  });
+  function enrich_(row, isAttempt) {
+    var affiliateId = String(row.Affiliate_ID),
+      assignment = activeByAffiliate[affiliateId],
+      affiliate = m.affiliateById[affiliateId],
+      actor = m.staffById[String(row.Staff_ID)] || {},
+      brand =
+        m.brandById[String(assignment.Brand_ID || affiliate.Brand_ID)] || {};
+    return {
+      id: String(isAttempt ? row.Attempt_ID : row.Interaction_ID),
+      affiliateId: affiliateId,
+      affiliateUsername: String(affiliate.Affiliate_Username || ""),
+      affiliateName: String(affiliate.Affiliate_Name || ""),
+      brandName: String(brand.Brand_Name || ""),
+      brandCode: String(brand.Brand_Code || ""),
+      type: String(
+        isAttempt ? "CONTACT_ATTEMPT" : row.Interaction_Type || "INTERACTION",
+      ),
+      channel: String(row.Channel || ""),
+      outcome: String(isAttempt ? row.Result || "" : row.Outcome || ""),
+      timestamp: interactionTime_(
+        row,
+        isAttempt ? "Attempt_At" : "Interaction_At",
+      ),
+      staffName: String(actor.Display_Name || actor.Username || ""),
+      notes: String(row.Notes || ""),
+      summary: String(
+        isAttempt ? row.Result_Detail || "" : row.Interaction_Type || "",
+      ),
+      followupRequired: isAttempt
+        ? Boolean(row.Callback_Required)
+        : Boolean(row.Followup_Required),
+    };
+  }
+  var candidates = interactions.map(function (row) {
+    return {
+      row: row,
+      isAttempt: false,
+      time: interactionSortTime_(interactionTime_(row, "Interaction_At")),
+      id: String(row.Interaction_ID),
+    };
+  });
+  attempts.forEach(function (row) {
+    if (row.Work_ID && interactionWork[String(row.Work_ID)]) return;
+    candidates.push({
+      row: row,
+      isAttempt: true,
+      time: interactionSortTime_(interactionTime_(row, "Attempt_At")),
+      id: String(row.Attempt_ID),
+    });
+  });
+  var today = new Date(),
+    summary = { all: candidates.length, today: 0, calls: 0, followup: 0 };
+  function state_(item) {
+    var row = item.row,
+      date = new Date(item.time),
+      channel = String(row.Channel || ""),
+      followup = item.isAttempt
+        ? Boolean(row.Callback_Required)
+        : Boolean(row.Followup_Required);
+    return {
+      today:
+        item.time > 0 &&
+        date.getFullYear() === today.getFullYear() &&
+        date.getMonth() === today.getMonth() &&
+        date.getDate() === today.getDate(),
+      call: channel === "CALL",
+      followup: followup,
+    };
+  }
+  candidates.forEach(function (item) {
+    var s = state_(item);
+    if (s.today) summary.today++;
+    if (s.call) summary.calls++;
+    if (s.followup) summary.followup++;
+  });
+  var filter = String(p.filter || "all"),
+    query = String(p.search || "")
+      .trim()
+      .toLowerCase();
+  candidates = candidates.filter(function (item) {
+    var s = state_(item);
+    if (
+      (filter === "today" && !s.today) ||
+      (filter === "calls" && !s.call) ||
+      (filter === "followup" && !s.followup)
+    )
+      return false;
+    if (!query) return true;
+    var row = item.row,
+      affiliate = m.affiliateById[String(row.Affiliate_ID)] || {},
+      assignment = activeByAffiliate[String(row.Affiliate_ID)] || {},
+      brand =
+        m.brandById[String(assignment.Brand_ID || affiliate.Brand_ID)] || {},
+      actor = m.staffById[String(row.Staff_ID)] || {};
+    return [
+      affiliate.Affiliate_Username,
+      affiliate.Affiliate_Name,
+      brand.Brand_Name,
+      brand.Brand_Code,
+      item.isAttempt ? "CONTACT_ATTEMPT" : row.Interaction_Type,
+      row.Channel,
+      item.isAttempt ? row.Result : row.Outcome,
+      actor.Display_Name,
+      actor.Username,
+    ].some(function (v) {
+      return (
+        String(v || "")
+          .toLowerCase()
+          .indexOf(query) >= 0
+      );
+    });
+  });
+  candidates.sort(function (a, b) {
+    return b.time - a.time || b.id.localeCompare(a.id);
+  });
+  var size = Math.max(1, Math.min(Number(p.pageSize) || 50, 100)),
+    page = Math.max(1, Number(p.page) || 1),
+    start = (page - 1) * size,
+    items = candidates.slice(start, start + size).map(function (item) {
+      return enrich_(item.row, item.isAttempt);
+    });
+  return {
+    items: items,
+    page: page,
+    pageSize: size,
+    total: candidates.length,
+    summary: summary,
+  };
+}
+function interactionSortTime_(value) {
+  var time = value ? new Date(value).getTime() : NaN;
+  return isFinite(time) ? time : 0;
+}
+function interactionTodayCount_(user, nowMs) {
+  var m = interactionMaps_(),
+    staffId = String(user.Staff_ID),
+    affiliates = {},
+    assignments = {},
+    interactionWork = {},
+    count = 0,
+    today = new Date(nowMs);
+  m.assignments.forEach(function (row) {
+    if (String(row.Staff_ID) === staffId) {
+      affiliates[String(row.Affiliate_ID)] = true;
+      assignments[String(row.Assignment_ID)] = true;
+    }
+  });
+  function visible_(row) {
+    var affiliateId = String(row.Affiliate_ID || ""),
+      assignmentId = String(row.Assignment_ID || "");
+    return Boolean(
+      affiliates[affiliateId] &&
+        (assignmentId
+          ? assignments[assignmentId]
+          : String(row.Staff_ID || "") === staffId),
+    );
+  }
+  function today_(row, field) {
+    var value = interactionTime_(row, field);
+    if (!value) return false;
+    var date = new Date(value);
+    return (
+      date.getFullYear() === today.getFullYear() &&
+      date.getMonth() === today.getMonth() &&
+      date.getDate() === today.getDate()
+    );
+  }
+  rows_("Interactions").forEach(function (row) {
+    if (!visible_(row)) return;
+    if (row.Work_ID) interactionWork[String(row.Work_ID)] = true;
+    if (today_(row, "Interaction_At")) count++;
+  });
+  rows_("Contact_Attempts").forEach(function (row) {
+    if (!visible_(row) || (row.Work_ID && interactionWork[String(row.Work_ID)]))
+      return;
+    if (today_(row, "Attempt_At")) count++;
+  });
+  return count;
+}

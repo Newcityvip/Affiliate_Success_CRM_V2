@@ -1,25 +1,554 @@
-function activeAssignment_(affiliateId){return rows_('Assignments').filter(function(a){return a.Affiliate_ID===affiliateId&&a.Status==='ACTIVE'})[0]||null}
-function assertOwned_(user,affiliateId){if(['ADMIN','SUPER_ADMIN'].indexOf(user.Role)>=0)return;var own=rows_('Assignments').some(function(a){return a.Affiliate_ID===affiliateId&&a.Staff_ID===user.Staff_ID&&a.Status==='ACTIVE'});if(!own)throw apiError_('FORBIDDEN','Access denied.')}
-function myWork_(user,p){
-  p=p||{};var staffId=String(user.Staff_ID),activeStatuses={PENDING:true,IN_PROGRESS:true,OVERDUE:true},assignments=rows_('Assignments'),affiliates=rows_('Affiliates'),brands=rows_('Brand_List'),assignmentById={},activeByAffiliate={},affiliateById={},brandById={},now=Date.now(),today=new Date(now),priorityRank={HIGH:0,NORMAL:1,LOW:2};
-  assignments.forEach(function(a){assignmentById[String(a.Assignment_ID)]=a;if(a.Status==='ACTIVE')activeByAffiliate[String(a.Affiliate_ID)]=a});affiliates.forEach(function(a){affiliateById[String(a.Affiliate_ID)]=a});brands.forEach(function(b){brandById[String(b.Brand_ID)]=b});
-  var candidates=rows_('Work_Items').filter(function(w){if(String(w.Staff_ID)!==staffId||!activeStatuses[String(w.Status)])return false;var assignment=assignmentById[String(w.Assignment_ID)];if(!assignment||assignment.Status!=='ACTIVE')assignment=activeByAffiliate[String(w.Affiliate_ID)];return Boolean(assignment&&String(assignment.Staff_ID)===staffId&&String(assignment.Affiliate_ID)===String(w.Affiliate_ID)&&affiliateById[String(w.Affiliate_ID)])});function time_(value){var n=value?new Date(value).getTime():NaN;return isFinite(n)?n:Infinity}function overdue_(w){return time_(w.Due_At)<now}candidates.sort(function(a,b){var ao=overdue_(a),bo=overdue_(b);if(ao!==bo)return ao?-1:1;var ap=priorityRank[String(a.Priority)]===undefined?3:priorityRank[String(a.Priority)],bp=priorityRank[String(b.Priority)]===undefined?3:priorityRank[String(b.Priority)];return ap-bp||time_(a.Due_At)-time_(b.Due_At)||time_(a.Assigned_At)-time_(b.Assigned_At)||String(a.Work_ID).localeCompare(String(b.Work_ID))});var summary={open:candidates.length,overdue:0,dueToday:0};candidates.forEach(function(w){var due=time_(w.Due_At),date=isFinite(due)?new Date(due):null;if(due<now)summary.overdue++;if(date&&date.getFullYear()===today.getFullYear()&&date.getMonth()===today.getMonth()&&date.getDate()===today.getDate())summary.dueToday++});var size=Math.max(1,Math.min(Number(p.pageSize)||50,100)),page=Math.max(1,Number(p.page)||1),start=(page-1)*size,items=candidates.slice(start,start+size).map(function(w){var assignment=assignmentById[String(w.Assignment_ID)];if(!assignment||assignment.Status!=='ACTIVE')assignment=activeByAffiliate[String(w.Affiliate_ID)];var affiliate=affiliateById[String(w.Affiliate_ID)],brandId=String(assignment.Brand_ID||affiliate.Brand_ID||''),brand=brandById[brandId]||{},due=String(w.Due_At||'');return {workId:w.Work_ID,affiliateId:w.Affiliate_ID,assignmentId:assignment.Assignment_ID,workType:w.Work_Type,workChannel:w.Work_Channel,priority:w.Priority,status:w.Status,title:w.Title,reason:w.Reason,assignedAt:w.Assigned_At,dueAt:due,startedAt:w.Started_At,overdue:overdue_(w),affiliateUsername:affiliate.Affiliate_Username,affiliateName:affiliate.Affiliate_Name||'',email:affiliate.Email||'',phone:affiliate.Phone||'',brandId:brandId,brandName:brand.Brand_Name||'',brandCode:brand.Brand_Code||'',lifecycleStatus:affiliate.Lifecycle_Status||'',prospectStatus:affiliate.Prospect_Status||'',telegramStatus:affiliate.Telegram_Status||''}});return {items:items,page:page,pageSize:size,total:candidates.length,summary:summary};
+function activeAssignment_(affiliateId) {
+  return (
+    rows_("Assignments").filter(function (a) {
+      return a.Affiliate_ID === affiliateId && a.Status === "ACTIVE";
+    })[0] || null
+  );
 }
-function affiliate_(user,p){assertOwned_(user,p.affiliateId);var aff=rows_('Affiliates').filter(function(x){return x.Affiliate_ID===p.affiliateId})[0];if(!aff)throw apiError_('NOT_FOUND','Affiliate not found.');return {affiliate:aff,assignments:rows_('Assignments').filter(function(x){return x.Affiliate_ID===p.affiliateId}),contacts:rows_('Contact_Attempts').filter(function(x){return x.Affiliate_ID===p.affiliateId}).slice(-100),interactions:rows_('Interactions').filter(function(x){return x.Affiliate_ID===p.affiliateId}).slice(-100)}}
-function assertWork_(u,id){var w=rows_('Work_Items').filter(function(x){return x.Work_ID===id})[0];if(!w)throw apiError_('NOT_FOUND','Work item not found.');if(['ADMIN','SUPER_ADMIN'].indexOf(u.Role)<0&&w.Staff_ID!==u.Staff_ID)throw apiError_('FORBIDDEN','Access denied.');return w}
-function startWork_(u,p){var w=assertWork_(u,p.workId);if(['PENDING','OVERDUE'].indexOf(w.Status)<0)throw apiError_('INVALID_STATE','Work item cannot be started.');var t=now_(),before=updateById_('Work_Items','Work_ID',w.Work_ID,{Status:'IN_PROGRESS',Started_At:t,Updated_At:t});updateById_('Affiliates','Affiliate_ID',w.Affiliate_ID,{Lifecycle_Status:'CONTACTING',Updated_At:t,Updated_By:u.Staff_ID});audit_(u,'START_WORK','Work',w.Work_ID,w.Affiliate_ID,before,{Status:'IN_PROGRESS'},{requestId:p.requestId});return {workId:w.Work_ID,status:'IN_PROGRESS'}}
-function contact_(u,p){
-  var w=assertWork_(u,p.workId);assertOwned_(u,w.Affiliate_ID);var assignment=activeAssignment_(w.Affiliate_ID),attempts=rows_('Contact_Attempts').filter(function(a){return a.Affiliate_ID===w.Affiliate_ID}),t=p.attemptAt||now_();
-  var row={Attempt_ID:nextId('Attempt'),Affiliate_ID:w.Affiliate_ID,Assignment_ID:assignment&&assignment.Assignment_ID||w.Assignment_ID,Work_ID:w.Work_ID,Staff_ID:u.Staff_ID,Attempt_Number:attempts.length+1,Channel:p.channel||w.Work_Channel,Contact_Value:p.contactValue||'',Attempt_At:t,Result:p.result,Result_Detail:p.resultDetail||'',Connected:Boolean(p.connected),Meaningful_Contact:Boolean(p.meaningfulContact),Callback_Required:Boolean(p.callbackRequired),Callback_At:p.callbackAt||'',Notes:p.notes||'',Created_At:now_(),Created_By:u.Staff_ID};appendRows_('Contact_Attempts',[row]);
-  var affChanges={Last_Contact_At:t,Updated_At:now_(),Updated_By:u.Staff_ID};if(row.Meaningful_Contact)affChanges.Last_Meaningful_Contact_At=t;updateById_('Affiliates','Affiliate_ID',w.Affiliate_ID,affChanges);audit_(u,'RECORD_CONTACT_ATTEMPT','Attempt',row.Attempt_ID,w.Affiliate_ID,null,row,{requestId:p.requestId});return row;
+function assertOwned_(user, affiliateId) {
+  if (["ADMIN", "SUPER_ADMIN"].indexOf(user.Role) >= 0) return;
+  var own = rows_("Assignments").some(function (a) {
+    return (
+      a.Affiliate_ID === affiliateId &&
+      a.Staff_ID === user.Staff_ID &&
+      a.Status === "ACTIVE"
+    );
+  });
+  if (!own) throw apiError_("FORBIDDEN", "Access denied.");
 }
-function interaction_(u,p){assertOwned_(u,p.affiliateId);var a=activeAssignment_(p.affiliateId),row={Interaction_ID:nextId('Interaction'),Affiliate_ID:p.affiliateId,Assignment_ID:a&&a.Assignment_ID||'',Staff_ID:u.Staff_ID,Work_ID:p.workId||'',Channel:p.channel||'',Interaction_Type:p.interactionType,Outcome:p.outcome||'',Notes:p.notes||'',Interaction_At:p.interactionAt||now_(),Followup_Required:Boolean(p.followupRequired),Followup_At:p.followupAt||'',Issue_Created:false,Growth_Opportunity:Boolean(p.growthOpportunity),Performance_Concern:Boolean(p.performanceConcern),Created_At:now_(),Created_By:u.Staff_ID};appendRows_('Interactions',[row]);if(row.Notes||row.Outcome)updateById_('Affiliates','Affiliate_ID',p.affiliateId,{Last_Meaningful_Contact_At:row.Interaction_At,Updated_At:now_(),Updated_By:u.Staff_ID});audit_(u,'LOG_INTERACTION','Interaction',row.Interaction_ID,p.affiliateId,null,row,{requestId:p.requestId});return row}
-function followup_(u,p){assertOwned_(u,p.affiliateId);var a=activeAssignment_(p.affiliateId),t=now_(),row={Followup_ID:nextId('Followup'),Affiliate_ID:p.affiliateId,Assignment_ID:a&&a.Assignment_ID||'',Staff_ID:u.Staff_ID,Source_Interaction_ID:p.sourceInteractionId||'',Source_Work_ID:p.sourceWorkId||'',Followup_Type:p.followupType,Priority:p.priority||'NORMAL',Status:'PENDING',Due_At:p.dueAt,Reminder_At:p.reminderAt||'',Completed_At:'',Outcome:'',Notes:p.notes||'',Created_At:t,Updated_At:t,Created_By:u.Staff_ID};appendRows_('Followups',[row]);audit_(u,'CREATE_FOLLOWUP','Followup',row.Followup_ID,p.affiliateId,null,row,{requestId:p.requestId});return row}
-function completeWork_(u,p){var w=assertWork_(u,p.workId),allowed=['COMPLETED','SKIPPED','CANCELLED'];if(allowed.indexOf(p.status)<0)throw apiError_('INVALID_STATUS','Invalid completion status.');if(p.status!=='COMPLETED'&&['SUPERVISOR','ADMIN','SUPER_ADMIN'].indexOf(u.Role)<0)throw apiError_('FORBIDDEN','Supervisor authorization required.');var changes={Status:p.status,Outcome:p.outcome||'',Completion_Notes:p.completionNotes||'',Next_Action_At:p.nextActionAt||'',Completed_At:now_(),Updated_At:now_()},before=updateById_('Work_Items','Work_ID',w.Work_ID,changes);audit_(u,'COMPLETE_WORK','Work',w.Work_ID,w.Affiliate_ID,before,changes,{requestId:p.requestId});return {workId:w.Work_ID,status:p.status}}
-function telegram_(u,p){var w=assertWork_(u,p.workId);assertOwned_(u,w.Affiliate_ID);var t=now_(),before=updateById_('Affiliates','Affiliate_ID',w.Affiliate_ID,{Telegram_Status:'CONNECTED',Telegram_Connected_At:t,Lifecycle_Status:'TELEGRAM_CONNECTED',Last_Meaningful_Contact_At:t,Updated_At:t,Updated_By:u.Staff_ID});completeWork_(u,{workId:w.Work_ID,status:'COMPLETED',outcome:'TELEGRAM_CONNECTED',completionNotes:p.notes||'',requestId:p.requestId});audit_(u,'MARK_TELEGRAM_CONNECTED','Affiliate',w.Affiliate_ID,w.Affiliate_ID,before,{Telegram_Status:'CONNECTED',Lifecycle_Status:'TELEGRAM_CONNECTED'},{requestId:p.requestId});return {affiliateId:w.Affiliate_ID,status:'TELEGRAM_CONNECTED'}}
+function myWork_(user, p) {
+  p = p || {};
+  var staffId = String(user.Staff_ID),
+    activeStatuses = { PENDING: true, IN_PROGRESS: true, OVERDUE: true },
+    assignments = rows_("Assignments"),
+    affiliates = rows_("Affiliates"),
+    brands = rows_("Brand_List"),
+    assignmentById = {},
+    activeByAffiliate = {},
+    affiliateById = {},
+    brandById = {},
+    now = Date.now(),
+    today = new Date(now),
+    priorityRank = { HIGH: 0, NORMAL: 1, LOW: 2 };
+  assignments.forEach(function (a) {
+    assignmentById[String(a.Assignment_ID)] = a;
+    if (a.Status === "ACTIVE") activeByAffiliate[String(a.Affiliate_ID)] = a;
+  });
+  affiliates.forEach(function (a) {
+    affiliateById[String(a.Affiliate_ID)] = a;
+  });
+  brands.forEach(function (b) {
+    brandById[String(b.Brand_ID)] = b;
+  });
+  var candidates = rows_("Work_Items").filter(function (w) {
+    if (String(w.Staff_ID) !== staffId || !activeStatuses[String(w.Status)])
+      return false;
+    var assignment = assignmentById[String(w.Assignment_ID)];
+    if (!assignment || assignment.Status !== "ACTIVE")
+      assignment = activeByAffiliate[String(w.Affiliate_ID)];
+    return Boolean(
+      assignment &&
+        String(assignment.Staff_ID) === staffId &&
+        String(assignment.Affiliate_ID) === String(w.Affiliate_ID) &&
+        affiliateById[String(w.Affiliate_ID)],
+    );
+  });
+  function time_(value) {
+    var n = value ? new Date(value).getTime() : NaN;
+    return isFinite(n) ? n : Infinity;
+  }
+  function overdue_(w) {
+    return time_(w.Due_At) < now;
+  }
+  function today_(w) {
+    var due = time_(w.Due_At),
+      date = isFinite(due) ? new Date(due) : null;
+    return Boolean(
+      date &&
+        date.getFullYear() === today.getFullYear() &&
+        date.getMonth() === today.getMonth() &&
+        date.getDate() === today.getDate(),
+    );
+  }
+  var summary = { open: candidates.length, overdue: 0, dueToday: 0, high: 0 };
+  candidates.forEach(function (w) {
+    if (overdue_(w)) summary.overdue++;
+    if (today_(w)) summary.dueToday++;
+    if (String(w.Priority) === "HIGH") summary.high++;
+  });
+  var filter = String(p.filter || "open");
+  if (filter === "overdue") candidates = candidates.filter(overdue_);
+  else if (filter === "today") candidates = candidates.filter(today_);
+  else if (filter === "high")
+    candidates = candidates.filter(function (w) {
+      return String(w.Priority) === "HIGH";
+    });
+  candidates.sort(function (a, b) {
+    var ao = overdue_(a),
+      bo = overdue_(b);
+    if (ao !== bo) return ao ? -1 : 1;
+    var ap =
+        priorityRank[String(a.Priority)] === undefined
+          ? 3
+          : priorityRank[String(a.Priority)],
+      bp =
+        priorityRank[String(b.Priority)] === undefined
+          ? 3
+          : priorityRank[String(b.Priority)];
+    return (
+      ap - bp ||
+      time_(a.Due_At) - time_(b.Due_At) ||
+      time_(a.Assigned_At) - time_(b.Assigned_At) ||
+      String(a.Work_ID).localeCompare(String(b.Work_ID))
+    );
+  });
+  var size = Math.max(1, Math.min(Number(p.pageSize) || 50, 100)),
+    page = Math.max(1, Number(p.page) || 1),
+    start = (page - 1) * size,
+    items = candidates.slice(start, start + size).map(function (w) {
+      var assignment = assignmentById[String(w.Assignment_ID)];
+      if (!assignment || assignment.Status !== "ACTIVE")
+        assignment = activeByAffiliate[String(w.Affiliate_ID)];
+      var affiliate = affiliateById[String(w.Affiliate_ID)],
+        brandId = String(assignment.Brand_ID || affiliate.Brand_ID || ""),
+        brand = brandById[brandId] || {},
+        due = String(w.Due_At || "");
+      return {
+        workId: w.Work_ID,
+        affiliateId: w.Affiliate_ID,
+        assignmentId: assignment.Assignment_ID,
+        workType: w.Work_Type,
+        workChannel: w.Work_Channel,
+        priority: w.Priority,
+        status: w.Status,
+        title: w.Title,
+        reason: w.Reason,
+        assignedAt: w.Assigned_At,
+        dueAt: due,
+        startedAt: w.Started_At,
+        overdue: overdue_(w),
+        affiliateUsername: affiliate.Affiliate_Username,
+        affiliateName: affiliate.Affiliate_Name || "",
+        email: affiliate.Email || "",
+        phone: affiliate.Phone || "",
+        brandId: brandId,
+        brandName: brand.Brand_Name || "",
+        brandCode: brand.Brand_Code || "",
+        lifecycleStatus: affiliate.Lifecycle_Status || "",
+        prospectStatus: affiliate.Prospect_Status || "",
+        telegramStatus: affiliate.Telegram_Status || "",
+      };
+    });
+  return {
+    items: items,
+    page: page,
+    pageSize: size,
+    total: candidates.length,
+    summary: summary,
+  };
+}
+function affiliate_(user, p) {
+  assertOwned_(user, p.affiliateId);
+  var aff = rows_("Affiliates").filter(function (x) {
+    return x.Affiliate_ID === p.affiliateId;
+  })[0];
+  if (!aff) throw apiError_("NOT_FOUND", "Affiliate not found.");
+  return {
+    affiliate: aff,
+    assignments: rows_("Assignments").filter(function (x) {
+      return x.Affiliate_ID === p.affiliateId;
+    }),
+    contacts: rows_("Contact_Attempts")
+      .filter(function (x) {
+        return x.Affiliate_ID === p.affiliateId;
+      })
+      .slice(-100),
+    interactions: rows_("Interactions")
+      .filter(function (x) {
+        return x.Affiliate_ID === p.affiliateId;
+      })
+      .slice(-100),
+  };
+}
+function assertWork_(u, id) {
+  var w = rows_("Work_Items").filter(function (x) {
+    return x.Work_ID === id;
+  })[0];
+  if (!w) throw apiError_("NOT_FOUND", "Work item not found.");
+  if (["ADMIN", "SUPER_ADMIN"].indexOf(u.Role) < 0 && w.Staff_ID !== u.Staff_ID)
+    throw apiError_("FORBIDDEN", "Access denied.");
+  return w;
+}
+function startWork_(u, p) {
+  var w = assertWork_(u, p.workId);
+  if (["PENDING", "OVERDUE"].indexOf(w.Status) < 0)
+    throw apiError_("INVALID_STATE", "Work item cannot be started.");
+  var t = now_(),
+    before = updateById_("Work_Items", "Work_ID", w.Work_ID, {
+      Status: "IN_PROGRESS",
+      Started_At: t,
+      Updated_At: t,
+    });
+  updateById_("Affiliates", "Affiliate_ID", w.Affiliate_ID, {
+    Lifecycle_Status: "CONTACTING",
+    Updated_At: t,
+    Updated_By: u.Staff_ID,
+  });
+  audit_(
+    u,
+    "START_WORK",
+    "Work",
+    w.Work_ID,
+    w.Affiliate_ID,
+    before,
+    { Status: "IN_PROGRESS" },
+    { requestId: p.requestId },
+  );
+  return { workId: w.Work_ID, status: "IN_PROGRESS" };
+}
+function contact_(u, p) {
+  var w = assertWork_(u, p.workId);
+  assertOwned_(u, w.Affiliate_ID);
+  var assignment = activeAssignment_(w.Affiliate_ID),
+    attempts = rows_("Contact_Attempts").filter(function (a) {
+      return a.Affiliate_ID === w.Affiliate_ID;
+    }),
+    t = p.attemptAt || now_();
+  var row = {
+    Attempt_ID: nextId("Attempt"),
+    Affiliate_ID: w.Affiliate_ID,
+    Assignment_ID: (assignment && assignment.Assignment_ID) || w.Assignment_ID,
+    Work_ID: w.Work_ID,
+    Staff_ID: u.Staff_ID,
+    Attempt_Number: attempts.length + 1,
+    Channel: p.channel || w.Work_Channel,
+    Contact_Value: p.contactValue || "",
+    Attempt_At: t,
+    Result: p.result,
+    Result_Detail: p.resultDetail || "",
+    Connected: Boolean(p.connected),
+    Meaningful_Contact: Boolean(p.meaningfulContact),
+    Callback_Required: Boolean(p.callbackRequired),
+    Callback_At: p.callbackAt || "",
+    Notes: p.notes || "",
+    Created_At: now_(),
+    Created_By: u.Staff_ID,
+  };
+  appendRows_("Contact_Attempts", [row]);
+  var affChanges = {
+    Last_Contact_At: t,
+    Updated_At: now_(),
+    Updated_By: u.Staff_ID,
+  };
+  if (row.Meaningful_Contact) affChanges.Last_Meaningful_Contact_At = t;
+  updateById_("Affiliates", "Affiliate_ID", w.Affiliate_ID, affChanges);
+  audit_(
+    u,
+    "RECORD_CONTACT_ATTEMPT",
+    "Attempt",
+    row.Attempt_ID,
+    w.Affiliate_ID,
+    null,
+    row,
+    { requestId: p.requestId },
+  );
+  return row;
+}
+function interaction_(u, p) {
+  assertOwned_(u, p.affiliateId);
+  var a = activeAssignment_(p.affiliateId),
+    row = {
+      Interaction_ID: nextId("Interaction"),
+      Affiliate_ID: p.affiliateId,
+      Assignment_ID: (a && a.Assignment_ID) || "",
+      Staff_ID: u.Staff_ID,
+      Work_ID: p.workId || "",
+      Channel: p.channel || "",
+      Interaction_Type: p.interactionType,
+      Outcome: p.outcome || "",
+      Notes: p.notes || "",
+      Interaction_At: p.interactionAt || now_(),
+      Followup_Required: Boolean(p.followupRequired),
+      Followup_At: p.followupAt || "",
+      Issue_Created: false,
+      Growth_Opportunity: Boolean(p.growthOpportunity),
+      Performance_Concern: Boolean(p.performanceConcern),
+      Created_At: now_(),
+      Created_By: u.Staff_ID,
+    };
+  appendRows_("Interactions", [row]);
+  if (row.Notes || row.Outcome)
+    updateById_("Affiliates", "Affiliate_ID", p.affiliateId, {
+      Last_Meaningful_Contact_At: row.Interaction_At,
+      Updated_At: now_(),
+      Updated_By: u.Staff_ID,
+    });
+  audit_(
+    u,
+    "LOG_INTERACTION",
+    "Interaction",
+    row.Interaction_ID,
+    p.affiliateId,
+    null,
+    row,
+    { requestId: p.requestId },
+  );
+  return row;
+}
+function followup_(u, p) {
+  assertOwned_(u, p.affiliateId);
+  var a = activeAssignment_(p.affiliateId),
+    t = now_(),
+    row = {
+      Followup_ID: nextId("Followup"),
+      Affiliate_ID: p.affiliateId,
+      Assignment_ID: (a && a.Assignment_ID) || "",
+      Staff_ID: u.Staff_ID,
+      Source_Interaction_ID: p.sourceInteractionId || "",
+      Source_Work_ID: p.sourceWorkId || "",
+      Followup_Type: p.followupType,
+      Priority: p.priority || "NORMAL",
+      Status: "PENDING",
+      Due_At: p.dueAt,
+      Reminder_At: p.reminderAt || "",
+      Completed_At: "",
+      Outcome: "",
+      Notes: p.notes || "",
+      Created_At: t,
+      Updated_At: t,
+      Created_By: u.Staff_ID,
+    };
+  appendRows_("Followups", [row]);
+  audit_(
+    u,
+    "CREATE_FOLLOWUP",
+    "Followup",
+    row.Followup_ID,
+    p.affiliateId,
+    null,
+    row,
+    { requestId: p.requestId },
+  );
+  return row;
+}
+function completeWork_(u, p) {
+  var w = assertWork_(u, p.workId),
+    allowed = ["COMPLETED", "SKIPPED", "CANCELLED"];
+  if (allowed.indexOf(p.status) < 0)
+    throw apiError_("INVALID_STATUS", "Invalid completion status.");
+  if (
+    p.status !== "COMPLETED" &&
+    ["SUPERVISOR", "ADMIN", "SUPER_ADMIN"].indexOf(u.Role) < 0
+  )
+    throw apiError_("FORBIDDEN", "Supervisor authorization required.");
+  var changes = {
+      Status: p.status,
+      Outcome: p.outcome || "",
+      Completion_Notes: p.completionNotes || "",
+      Next_Action_At: p.nextActionAt || "",
+      Completed_At: now_(),
+      Updated_At: now_(),
+    },
+    before = updateById_("Work_Items", "Work_ID", w.Work_ID, changes);
+  audit_(
+    u,
+    "COMPLETE_WORK",
+    "Work",
+    w.Work_ID,
+    w.Affiliate_ID,
+    before,
+    changes,
+    { requestId: p.requestId },
+  );
+  return { workId: w.Work_ID, status: p.status };
+}
+function telegram_(u, p) {
+  var w = assertWork_(u, p.workId);
+  assertOwned_(u, w.Affiliate_ID);
+  var t = now_(),
+    before = updateById_("Affiliates", "Affiliate_ID", w.Affiliate_ID, {
+      Telegram_Status: "CONNECTED",
+      Telegram_Connected_At: t,
+      Lifecycle_Status: "TELEGRAM_CONNECTED",
+      Last_Meaningful_Contact_At: t,
+      Updated_At: t,
+      Updated_By: u.Staff_ID,
+    });
+  completeWork_(u, {
+    workId: w.Work_ID,
+    status: "COMPLETED",
+    outcome: "TELEGRAM_CONNECTED",
+    completionNotes: p.notes || "",
+    requestId: p.requestId,
+  });
+  audit_(
+    u,
+    "MARK_TELEGRAM_CONNECTED",
+    "Affiliate",
+    w.Affiliate_ID,
+    w.Affiliate_ID,
+    before,
+    { Telegram_Status: "CONNECTED", Lifecycle_Status: "TELEGRAM_CONNECTED" },
+    { requestId: p.requestId },
+  );
+  return { affiliateId: w.Affiliate_ID, status: "TELEGRAM_CONNECTED" };
+}
 
-function assign_(u,p){var lock=LockService.getScriptLock();lock.waitLock(30000);var result;try{result=assignUnlocked_(u,p)}finally{lock.releaseLock()}audit_(u,'ASSIGN_AFFILIATE','Assignment',result.assignmentIds.join(','),p.affiliateId||'',null,{staffId:p.staffId,count:result.assignmentIds.length},{requestId:p.requestId});return result}
-function assignUnlocked_(u,p){var ids=p.affiliateIds||[p.affiliateId],target=rows_('Staff_List').filter(function(s){return s.Staff_ID===p.staffId&&s.Status==='ACTIVE'})[0],t=now_(),created=[];if(!target)throw apiError_('NOT_FOUND','Target staff member not found.');ids.forEach(function(id){var affiliate=rows_('Affiliates').filter(function(a){return a.Affiliate_ID===id})[0];if(!affiliate)throw apiError_('NOT_FOUND','Affiliate not found.');if(activeAssignment_(id))throw apiError_('INVALID_STATE','Affiliate already has an active assignment.');var row={Assignment_ID:nextIdUnlocked_('Assignment'),Affiliate_ID:id,Staff_ID:target.Staff_ID,Brand_ID:p.brandId||affiliate.Brand_ID,Assignment_Type:p.assignmentType||'PROSPECT',Status:'ACTIVE',Assigned_At:t,Activated_At:t,Ended_At:'',End_Reason:'',Previous_Assignment_ID:p.previousAssignmentId||'',Import_Batch_ID:p.importBatchId||'',Assigned_By:u.Staff_ID,Created_At:t,Updated_At:t};appendRows_('Assignments',[row]);updateById_('Affiliates','Affiliate_ID',id,{Lifecycle_Status:'ASSIGNED',Updated_At:t,Updated_By:u.Staff_ID});created.push(row.Assignment_ID)});return {assigned:created.length,assignmentIds:created}}
-function transfer_(u,p){var lock=LockService.getScriptLock();lock.waitLock(30000);var result,previous;try{previous=activeAssignment_(p.affiliateId);if(!previous)throw apiError_('INVALID_STATE','Affiliate has no active assignment.');var t=now_();updateById_('Assignments','Assignment_ID',previous.Assignment_ID,{Status:'ENDED',Ended_At:t,End_Reason:'TRANSFER',Updated_At:t});result=assignUnlocked_(u,{affiliateId:p.affiliateId,staffId:p.staffId,brandId:previous.Brand_ID,assignmentType:previous.Assignment_Type,previousAssignmentId:previous.Assignment_ID})}finally{lock.releaseLock()}audit_(u,'TRANSFER_AFFILIATE','Affiliate',p.affiliateId,p.affiliateId,{staffId:previous.Staff_ID},{staffId:p.staffId},{requestId:p.requestId});return result}
-function archive_(u,p){var t=now_(),before=updateById_('Affiliates','Affiliate_ID',p.affiliateId,{Lifecycle_Status:'ARCHIVED',Prospect_Status:'CLOSED',Archive_Status:'ARCHIVED',Archive_Reason:p.reason,Archived_At:t,Updated_At:t,Updated_By:u.Staff_ID});if(!before)throw apiError_('NOT_FOUND','Affiliate not found.');var active=activeAssignment_(p.affiliateId);if(active)updateById_('Assignments','Assignment_ID',active.Assignment_ID,{Status:'ENDED',Ended_At:t,End_Reason:p.reason,Updated_At:t});audit_(u,'ARCHIVE_AFFILIATE','Affiliate',p.affiliateId,p.affiliateId,before,{Archive_Status:'ARCHIVED',Archive_Reason:p.reason},{requestId:p.requestId});return {affiliateId:p.affiliateId,status:'ARCHIVED'}}
-function reopen_(u,p){var before=updateById_('Affiliates','Affiliate_ID',p.affiliateId,{Lifecycle_Status:'UNASSIGNED',Prospect_Status:'ACTIVE',Archive_Status:'ACTIVE',Archive_Reason:'',Archived_At:'',Updated_At:now_(),Updated_By:u.Staff_ID});if(!before)throw apiError_('NOT_FOUND','Affiliate not found.');audit_(u,'REOPEN_AFFILIATE','Affiliate',p.affiliateId,p.affiliateId,before,{Archive_Status:'ACTIVE',Lifecycle_Status:'UNASSIGNED'},{requestId:p.requestId});return {affiliateId:p.affiliateId,status:'UNASSIGNED'}}
+function assign_(u, p) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  var result;
+  try {
+    result = assignUnlocked_(u, p);
+  } finally {
+    lock.releaseLock();
+  }
+  audit_(
+    u,
+    "ASSIGN_AFFILIATE",
+    "Assignment",
+    result.assignmentIds.join(","),
+    p.affiliateId || "",
+    null,
+    { staffId: p.staffId, count: result.assignmentIds.length },
+    { requestId: p.requestId },
+  );
+  return result;
+}
+function assignUnlocked_(u, p) {
+  var ids = p.affiliateIds || [p.affiliateId],
+    target = rows_("Staff_List").filter(function (s) {
+      return s.Staff_ID === p.staffId && s.Status === "ACTIVE";
+    })[0],
+    t = now_(),
+    created = [];
+  if (!target) throw apiError_("NOT_FOUND", "Target staff member not found.");
+  ids.forEach(function (id) {
+    var affiliate = rows_("Affiliates").filter(function (a) {
+      return a.Affiliate_ID === id;
+    })[0];
+    if (!affiliate) throw apiError_("NOT_FOUND", "Affiliate not found.");
+    if (activeAssignment_(id))
+      throw apiError_(
+        "INVALID_STATE",
+        "Affiliate already has an active assignment.",
+      );
+    var row = {
+      Assignment_ID: nextIdUnlocked_("Assignment"),
+      Affiliate_ID: id,
+      Staff_ID: target.Staff_ID,
+      Brand_ID: p.brandId || affiliate.Brand_ID,
+      Assignment_Type: p.assignmentType || "PROSPECT",
+      Status: "ACTIVE",
+      Assigned_At: t,
+      Activated_At: t,
+      Ended_At: "",
+      End_Reason: "",
+      Previous_Assignment_ID: p.previousAssignmentId || "",
+      Import_Batch_ID: p.importBatchId || "",
+      Assigned_By: u.Staff_ID,
+      Created_At: t,
+      Updated_At: t,
+    };
+    appendRows_("Assignments", [row]);
+    updateById_("Affiliates", "Affiliate_ID", id, {
+      Lifecycle_Status: "ASSIGNED",
+      Updated_At: t,
+      Updated_By: u.Staff_ID,
+    });
+    created.push(row.Assignment_ID);
+  });
+  return { assigned: created.length, assignmentIds: created };
+}
+function transfer_(u, p) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  var result, previous;
+  try {
+    previous = activeAssignment_(p.affiliateId);
+    if (!previous)
+      throw apiError_("INVALID_STATE", "Affiliate has no active assignment.");
+    var t = now_();
+    updateById_("Assignments", "Assignment_ID", previous.Assignment_ID, {
+      Status: "ENDED",
+      Ended_At: t,
+      End_Reason: "TRANSFER",
+      Updated_At: t,
+    });
+    result = assignUnlocked_(u, {
+      affiliateId: p.affiliateId,
+      staffId: p.staffId,
+      brandId: previous.Brand_ID,
+      assignmentType: previous.Assignment_Type,
+      previousAssignmentId: previous.Assignment_ID,
+    });
+  } finally {
+    lock.releaseLock();
+  }
+  audit_(
+    u,
+    "TRANSFER_AFFILIATE",
+    "Affiliate",
+    p.affiliateId,
+    p.affiliateId,
+    { staffId: previous.Staff_ID },
+    { staffId: p.staffId },
+    { requestId: p.requestId },
+  );
+  return result;
+}
+function archive_(u, p) {
+  var t = now_(),
+    before = updateById_("Affiliates", "Affiliate_ID", p.affiliateId, {
+      Lifecycle_Status: "ARCHIVED",
+      Prospect_Status: "CLOSED",
+      Archive_Status: "ARCHIVED",
+      Archive_Reason: p.reason,
+      Archived_At: t,
+      Updated_At: t,
+      Updated_By: u.Staff_ID,
+    });
+  if (!before) throw apiError_("NOT_FOUND", "Affiliate not found.");
+  var active = activeAssignment_(p.affiliateId);
+  if (active)
+    updateById_("Assignments", "Assignment_ID", active.Assignment_ID, {
+      Status: "ENDED",
+      Ended_At: t,
+      End_Reason: p.reason,
+      Updated_At: t,
+    });
+  audit_(
+    u,
+    "ARCHIVE_AFFILIATE",
+    "Affiliate",
+    p.affiliateId,
+    p.affiliateId,
+    before,
+    { Archive_Status: "ARCHIVED", Archive_Reason: p.reason },
+    { requestId: p.requestId },
+  );
+  return { affiliateId: p.affiliateId, status: "ARCHIVED" };
+}
+function reopen_(u, p) {
+  var before = updateById_("Affiliates", "Affiliate_ID", p.affiliateId, {
+    Lifecycle_Status: "UNASSIGNED",
+    Prospect_Status: "ACTIVE",
+    Archive_Status: "ACTIVE",
+    Archive_Reason: "",
+    Archived_At: "",
+    Updated_At: now_(),
+    Updated_By: u.Staff_ID,
+  });
+  if (!before) throw apiError_("NOT_FOUND", "Affiliate not found.");
+  audit_(
+    u,
+    "REOPEN_AFFILIATE",
+    "Affiliate",
+    p.affiliateId,
+    p.affiliateId,
+    before,
+    { Archive_Status: "ACTIVE", Lifecycle_Status: "UNASSIGNED" },
+    { requestId: p.requestId },
+  );
+  return { affiliateId: p.affiliateId, status: "UNASSIGNED" };
+}

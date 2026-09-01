@@ -1,10 +1,321 @@
-const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const counts={staff:25,teams:5,brands:8,affiliates:4000,work:8000,followups:5000,tasks:5000,issues:5000,activity:10000,performance:15000},data={Staff_List:[],Team_List:[],Brand_List:[],Affiliates:[],Assignments:[],Work_Items:[],Followups:[],Tasks:[],Issues:[],Interactions:[],Contact_Attempts:[],Monthly_Performance:[]};
-for(let i=0;i<counts.teams;i++)data.Team_List.push({Team_ID:`T${i}`,Team_Name:`Team ${i}`});for(let i=0;i<counts.brands;i++)data.Brand_List.push({Brand_ID:`B${i}`,Brand_Name:`Brand ${i}`});for(let i=0;i<counts.staff;i++)data.Staff_List.push({Staff_ID:`S${i}`,Display_Name:`Staff ${i}`,Role:'STAFF',Status:'ACTIVE',Team:`T${i%counts.teams}`});
-for(let i=0;i<counts.affiliates;i++){const id=`A${String(i).padStart(5,'0')}`,staff=`S${i%counts.staff}`,brand=`B${i%counts.brands}`,assignment=`AS${i}`;data.Affiliates.push({Affiliate_ID:id,Affiliate_Username:`affiliate-${String(i).padStart(5,'0')}`,Brand_ID:brand,Prospect_Status:'ACTIVE',Telegram_Status:i%3?'NOT_CONNECTED':'CONNECTED'});data.Assignments.push({Assignment_ID:assignment,Affiliate_ID:id,Staff_ID:staff,Brand_ID:brand,Status:i===3999?'ENDED':'ACTIVE'})}
-for(let i=0;i<counts.work;i++){const n=i%counts.affiliates;data.Work_Items.push({Work_ID:`W${i}`,Affiliate_ID:`A${String(n).padStart(5,'0')}`,Assignment_ID:`AS${n}`,Staff_ID:`S${n%counts.staff}`,Status:'PENDING',Priority:i%7?'NORMAL':'HIGH',Due_At:new Date(Date.now()+(i%2?-1:1)*86400000).toISOString(),Assigned_At:'2026-01-01T00:00:00.000Z'})}
-for(let i=0;i<counts.followups;i++){const n=i%counts.affiliates;data.Followups.push({Followup_ID:`F${i}`,Affiliate_ID:`A${String(n).padStart(5,'0')}`,Assignment_ID:`AS${n}`,Staff_ID:`S${n%counts.staff}`,Status:'PENDING',Due_At:'2026-09-10T00:00:00.000Z'})}for(let i=0;i<counts.tasks;i++){const n=i%counts.affiliates;data.Tasks.push({Task_ID:`TK${i}`,Affiliate_ID:`A${String(n).padStart(5,'0')}`,Assignment_ID:`AS${n}`,Staff_ID:`S${n%counts.staff}`,Status:'PENDING',Priority:'NORMAL',Due_At:'2026-09-10T00:00:00.000Z'})}for(let i=0;i<counts.issues;i++){const n=i%counts.affiliates;data.Issues.push({Issue_ID:`I${i}`,Affiliate_ID:`A${String(n).padStart(5,'0')}`,Assignment_ID:`AS${n}`,Reported_By:`S${n%counts.staff}`,Assigned_To:`S${n%counts.staff}`,Status:'OPEN',Priority:'NORMAL',Updated_At:'2026-09-01T00:00:00.000Z'})}
-for(let i=0;i<counts.activity;i++){const n=i%counts.affiliates,row={Affiliate_ID:`A${String(n).padStart(5,'0')}`,Assignment_ID:`AS${n}`,Staff_ID:`S${n%counts.staff}`,Work_ID:`W${i}`,Created_At:'2026-09-01T00:00:00.000Z'};(i%2?data.Interactions:data.Contact_Attempts).push(i%2?{...row,Interaction_ID:`IN${i}`,Interaction_At:row.Created_At}:{...row,Attempt_ID:`AT${i}`,Attempt_At:row.Created_At})}for(let i=0;i<counts.performance;i++){const n=i%counts.affiliates;data.Monthly_Performance.push({Performance_ID:`P${i}`,Affiliate_ID:`A${String(n).padStart(5,'0')}`,Brand_ID:`B${n%counts.brands}`,Period:`2026-${String(i%12+1).padStart(2,'0')}`})}
-function environment(){const reads={},memo={},rowMemo={},c={console,Date,String,Number,Boolean,Math,Object,Array,JSON,isFinite,encodeURIComponent,apiError_:(code,message)=>Object.assign(new Error(message),{code}),requireRole_:(u,roles)=>{if(!roles.includes(u.Role))throw c.apiError_('FORBIDDEN','Denied')},rows_:name=>{if(!Object.prototype.hasOwnProperty.call(rowMemo,name)){reads[name]=(reads[name]||0)+1;rowMemo[name]=data[name]||[]}return rowMemo[name]},requestMemo_:(key,builder)=>Object.prototype.hasOwnProperty.call(memo,key)?memo[key]:memo[key]=builder(),page_:(items,p)=>{const size=Math.max(1,Math.min(Number(p.pageSize)||50,100)),page=Math.max(1,Number(p.page)||1),start=(page-1)*size;return{items:items.slice(start,start+size),page,pageSize:size,total:items.length}}};vm.createContext(c);['backend/Services.gs','backend/Tasks.gs','backend/Issues.gs','backend/Followups.gs','backend/Interactions.gs','backend/Directory.gs','backend/AffiliateSearch.gs'].forEach(file=>vm.runInContext(fs.readFileSync(file,'utf8'),c));return{c,reads}}
-const{c,reads}=environment(),enriched={directory:0,tasks:0,issues:0,followups:0},directoryBase=c.directoryRow_,taskBase=c.taskSafe_,issueBase=c.issueSafe_,followupBase=c.followupSafe_;c.directoryRow_=(...args)=>(enriched.directory++,directoryBase(...args));c.taskSafe_=(...args)=>(enriched.tasks++,taskBase(...args));c.issueSafe_=(...args)=>(enriched.issues++,issueBase(...args));c.followupSafe_=(...args)=>(enriched.followups++,followupBase(...args));const staff={Staff_ID:'S0',Role:'STAFF'},admin={Staff_ID:'ADMIN',Role:'ADMIN'};
-const directory=c.affiliateDirectory_(staff,{staffId:'S1',pageSize:50}),work=c.myWork_(staff,{staffId:'S1',pageSize:50}),tasks=c.tasks_(staff,{staffId:'S1',pageSize:50}),issues=c.issues_(staff,{staffId:'S1',pageSize:50}),followups=c.myFollowups_(staff,{staffId:'S1',pageSize:50}),interactions=c.myInteractions_(staff,{staffId:'S1',pageSize:50}),staffSearch=c.searchAffiliates_(staff,{query:'affiliate',staffId:'S1'}),adminSearch=c.searchAffiliates_(admin,{query:'affiliate',staffId:'S1'});assert.ok(directory.total>50&&directory.items.length===50);assert.equal(enriched.directory,50);assert.equal(enriched.tasks,50);assert.equal(enriched.issues,50);assert.equal(enriched.followups,50);assert.equal(followups.items.length,50);assert.ok(followups.total>50&&followups.summary.open===followups.total&&followups.hasMore);assert.equal(work.items.length,50);assert.ok([directory,work,tasks,issues,followups,interactions].every(result=>result.items.every(item=>!item.staffId||item.staffId==='S0')));assert.ok(staffSearch.items.length<=25&&staffSearch.items.every(x=>x.staffId==='S0'));assert.ok(adminSearch.items.length<=25&&adminSearch.items.every(x=>x.staffId==='S1'));assert.ok(!staffSearch.items.some(x=>x.affiliateId==='A03999'));assert.equal(c.affiliateDetail_(admin,{affiliateId:'A00001'}).profile.affiliateId,'A00001');assert.throws(()=>c.affiliateDetail_(staff,{affiliateId:'A00001'}),e=>e.code==='FORBIDDEN');assert.ok(!JSON.stringify([directory,work,tasks,issues,followups,interactions,staffSearch,adminSearch]).match(/Password|Token|Session|Hash/i));Object.keys(reads).forEach(name=>assert.equal(reads[name],1,'one bulk read for '+name));assert.deepEqual(counts,{staff:25,teams:5,brands:8,affiliates:4000,work:8000,followups:5000,tasks:5000,issues:5000,activity:10000,performance:15000});console.log('Production-scale read fixture, scoping, bounds, search, and enrichment tests passed');
+const assert = require("node:assert/strict"),
+  fs = require("node:fs"),
+  vm = require("node:vm");
+const counts = {
+    staff: 25,
+    teams: 5,
+    brands: 8,
+    affiliates: 4000,
+    work: 8000,
+    followups: 5000,
+    tasks: 5000,
+    issues: 5000,
+    activity: 10000,
+    performance: 15000,
+  },
+  data = {
+    Staff_List: [],
+    Team_List: [],
+    Brand_List: [],
+    Affiliates: [],
+    Assignments: [],
+    Work_Items: [],
+    Followups: [],
+    Tasks: [],
+    Issues: [],
+    Interactions: [],
+    Contact_Attempts: [],
+    Monthly_Performance: [],
+  };
+for (let i = 0; i < counts.teams; i++)
+  data.Team_List.push({ Team_ID: `T${i}`, Team_Name: `Team ${i}` });
+for (let i = 0; i < counts.brands; i++)
+  data.Brand_List.push({ Brand_ID: `B${i}`, Brand_Name: `Brand ${i}` });
+for (let i = 0; i < counts.staff; i++)
+  data.Staff_List.push({
+    Staff_ID: `S${i}`,
+    Display_Name: `Staff ${i}`,
+    Role: "STAFF",
+    Status: "ACTIVE",
+    Team: `T${i % counts.teams}`,
+  });
+for (let i = 0; i < counts.affiliates; i++) {
+  const id = `A${String(i).padStart(5, "0")}`,
+    staff = `S${i % counts.staff}`,
+    brand = `B${i % counts.brands}`,
+    assignment = `AS${i}`;
+  data.Affiliates.push({
+    Affiliate_ID: id,
+    Affiliate_Username: `affiliate-${String(i).padStart(5, "0")}`,
+    Brand_ID: brand,
+    Prospect_Status: "ACTIVE",
+    Telegram_Status: i % 3 ? "NOT_CONNECTED" : "CONNECTED",
+  });
+  data.Assignments.push({
+    Assignment_ID: assignment,
+    Affiliate_ID: id,
+    Staff_ID: staff,
+    Brand_ID: brand,
+    Status: i === 3999 ? "ENDED" : "ACTIVE",
+  });
+}
+for (let i = 0; i < counts.work; i++) {
+  const n = i % counts.affiliates;
+  data.Work_Items.push({
+    Work_ID: `W${i}`,
+    Affiliate_ID: `A${String(n).padStart(5, "0")}`,
+    Assignment_ID: `AS${n}`,
+    Staff_ID: `S${n % counts.staff}`,
+    Status: "PENDING",
+    Priority: i % 7 ? "NORMAL" : "HIGH",
+    Due_At: new Date(Date.now() + (i % 2 ? -1 : 1) * 86400000).toISOString(),
+    Assigned_At: "2026-01-01T00:00:00.000Z",
+  });
+}
+for (let i = 0; i < counts.followups; i++) {
+  const n = i % counts.affiliates;
+  data.Followups.push({
+    Followup_ID: `F${i}`,
+    Affiliate_ID: `A${String(n).padStart(5, "0")}`,
+    Assignment_ID: `AS${n}`,
+    Staff_ID: `S${n % counts.staff}`,
+    Status: "PENDING",
+    Due_At: "2026-09-10T00:00:00.000Z",
+  });
+}
+for (let i = 0; i < counts.tasks; i++) {
+  const n = i % counts.affiliates;
+  data.Tasks.push({
+    Task_ID: `TK${i}`,
+    Affiliate_ID: `A${String(n).padStart(5, "0")}`,
+    Assignment_ID: `AS${n}`,
+    Staff_ID: `S${n % counts.staff}`,
+    Status: "PENDING",
+    Priority: "NORMAL",
+    Due_At: "2026-09-10T00:00:00.000Z",
+  });
+}
+for (let i = 0; i < counts.issues; i++) {
+  const n = i % counts.affiliates;
+  data.Issues.push({
+    Issue_ID: `I${i}`,
+    Affiliate_ID: `A${String(n).padStart(5, "0")}`,
+    Assignment_ID: `AS${n}`,
+    Reported_By: `S${n % counts.staff}`,
+    Assigned_To: `S${n % counts.staff}`,
+    Status: "OPEN",
+    Priority: "NORMAL",
+    Updated_At: "2026-09-01T00:00:00.000Z",
+  });
+}
+for (let i = 0; i < counts.activity; i++) {
+  const n = i % counts.affiliates,
+    row = {
+      Affiliate_ID: `A${String(n).padStart(5, "0")}`,
+      Assignment_ID: `AS${n}`,
+      Staff_ID: `S${n % counts.staff}`,
+      Work_ID: `W${i}`,
+      Created_At: "2026-09-01T00:00:00.000Z",
+    };
+  (i % 2 ? data.Interactions : data.Contact_Attempts).push(
+    i % 2
+      ? { ...row, Interaction_ID: `IN${i}`, Interaction_At: row.Created_At }
+      : { ...row, Attempt_ID: `AT${i}`, Attempt_At: row.Created_At },
+  );
+}
+for (let i = 0; i < counts.performance; i++) {
+  const n = i % counts.affiliates;
+  data.Monthly_Performance.push({
+    Performance_ID: `P${i}`,
+    Affiliate_ID: `A${String(n).padStart(5, "0")}`,
+    Brand_ID: `B${n % counts.brands}`,
+    Period: `2026-${String((i % 12) + 1).padStart(2, "0")}`,
+  });
+}
+function environment() {
+  const reads = {},
+    memo = {},
+    rowMemo = {},
+    c = {
+      console,
+      Date,
+      String,
+      Number,
+      Boolean,
+      Math,
+      Object,
+      Array,
+      JSON,
+      isFinite,
+      encodeURIComponent,
+      apiError_: (code, message) => Object.assign(new Error(message), { code }),
+      requireRole_: (u, roles) => {
+        if (!roles.includes(u.Role)) throw c.apiError_("FORBIDDEN", "Denied");
+      },
+      rows_: (name) => {
+        if (!Object.prototype.hasOwnProperty.call(rowMemo, name)) {
+          reads[name] = (reads[name] || 0) + 1;
+          rowMemo[name] = data[name] || [];
+        }
+        return rowMemo[name];
+      },
+      requestMemo_: (key, builder) =>
+        Object.prototype.hasOwnProperty.call(memo, key)
+          ? memo[key]
+          : (memo[key] = builder()),
+      page_: (items, p) => {
+        const size = Math.max(1, Math.min(Number(p.pageSize) || 50, 100)),
+          page = Math.max(1, Number(p.page) || 1),
+          start = (page - 1) * size;
+        return {
+          items: items.slice(start, start + size),
+          page,
+          pageSize: size,
+          total: items.length,
+        };
+      },
+    };
+  vm.createContext(c);
+  [
+    "backend/Services.gs",
+    "backend/Tasks.gs",
+    "backend/Issues.gs",
+    "backend/Followups.gs",
+    "backend/Interactions.gs",
+    "backend/Directory.gs",
+    "backend/AffiliateSearch.gs",
+  ].forEach((file) => vm.runInContext(fs.readFileSync(file, "utf8"), c));
+  return { c, reads };
+}
+const { c, reads } = environment(),
+  enriched = { directory: 0, tasks: 0, issues: 0, followups: 0 },
+  directoryBase = c.directoryRow_,
+  taskBase = c.taskSafe_,
+  issueBase = c.issueSafe_,
+  followupBase = c.followupSafe_;
+c.directoryRow_ = (...args) => (enriched.directory++, directoryBase(...args));
+c.taskSafe_ = (...args) => (enriched.tasks++, taskBase(...args));
+c.issueSafe_ = (...args) => (enriched.issues++, issueBase(...args));
+c.followupSafe_ = (...args) => (enriched.followups++, followupBase(...args));
+const staff = { Staff_ID: "S0", Role: "STAFF" },
+  admin = { Staff_ID: "ADMIN", Role: "ADMIN" };
+const directory = c.affiliateDirectory_(staff, { staffId: "S1", pageSize: 50 }),
+  work = c.myWork_(staff, { staffId: "S1", pageSize: 50 }),
+  tasks = c.tasks_(staff, { staffId: "S1", pageSize: 50 }),
+  issues = c.issues_(staff, { staffId: "S1", pageSize: 50 }),
+  followups = c.myFollowups_(staff, { staffId: "S1", pageSize: 50 }),
+  interactions = c.myInteractions_(staff, { staffId: "S1", pageSize: 50 }),
+  staffSearch = c.searchAffiliates_(staff, {
+    query: "affiliate",
+    staffId: "S1",
+  }),
+  adminSearch = c.searchAffiliates_(admin, {
+    query: "affiliate",
+    staffId: "S1",
+  });
+assert.ok(directory.total > 50 && directory.items.length === 50);
+assert.equal(enriched.directory, 50);
+assert.equal(enriched.tasks, 50);
+assert.equal(enriched.issues, 50);
+assert.equal(enriched.followups, 50);
+const beforeFiltered = { ...enriched },
+  filteredDirectory = c.affiliateDirectory_(staff, {
+    staffId: "S1",
+    search: "affiliate",
+    page: 2,
+    pageSize: 25,
+  }),
+  filteredTasks = c.tasks_(staff, {
+    staffId: "S1",
+    card: "high",
+    pageSize: 25,
+  }),
+  filteredIssues = c.issues_(staff, {
+    staffId: "S1",
+    card: "OPEN",
+    pageSize: 25,
+  }),
+  filteredFollowups = c.myFollowups_(staff, {
+    staffId: "S1",
+    filter: "open",
+    pageSize: 25,
+  }),
+  filteredInteractions = c.myInteractions_(staff, {
+    staffId: "S1",
+    filter: "all",
+    search: "affiliate",
+    pageSize: 25,
+  });
+assert.equal(enriched.directory - beforeFiltered.directory, 25);
+assert.equal(enriched.tasks - beforeFiltered.tasks, filteredTasks.items.length);
+assert.equal(enriched.issues - beforeFiltered.issues, 25);
+assert.equal(enriched.followups - beforeFiltered.followups, 25);
+assert.equal(filteredDirectory.summary.totalAffiliates, directory.summary.totalAffiliates);
+assert.equal(filteredTasks.summary.open, tasks.summary.open);
+assert.equal(filteredIssues.summary.open, issues.summary.open);
+assert.equal(filteredFollowups.summary.open, followups.summary.open);
+assert.equal(filteredInteractions.summary.all, interactions.summary.all);
+assert.ok(
+  [filteredDirectory, filteredTasks, filteredIssues, filteredFollowups, filteredInteractions].every(
+    (result) => result.items.every((item) => !item.staffId || item.staffId === "S0"),
+  ),
+);
+assert.equal(followups.items.length, 50);
+assert.ok(
+  followups.total > 50 &&
+    followups.summary.open === followups.total &&
+    followups.hasMore,
+);
+assert.equal(work.items.length, 50);
+assert.ok(
+  [directory, work, tasks, issues, followups, interactions].every((result) =>
+    result.items.every((item) => !item.staffId || item.staffId === "S0"),
+  ),
+);
+assert.ok(
+  staffSearch.items.length <= 25 &&
+    staffSearch.items.every((x) => x.staffId === "S0"),
+);
+assert.ok(
+  adminSearch.items.length <= 25 &&
+    adminSearch.items.every((x) => x.staffId === "S1"),
+);
+assert.ok(!staffSearch.items.some((x) => x.affiliateId === "A03999"));
+assert.equal(
+  c.affiliateDetail_(admin, { affiliateId: "A00001" }).profile.affiliateId,
+  "A00001",
+);
+assert.throws(
+  () => c.affiliateDetail_(staff, { affiliateId: "A00001" }),
+  (e) => e.code === "FORBIDDEN",
+);
+assert.ok(
+  !JSON.stringify([
+    directory,
+    work,
+    tasks,
+    issues,
+    followups,
+    interactions,
+    staffSearch,
+    adminSearch,
+  ]).match(/Password|Token|Session|Hash/i),
+);
+Object.keys(reads).forEach((name) =>
+  assert.equal(reads[name], 1, "one bulk read for " + name),
+);
+assert.deepEqual(counts, {
+  staff: 25,
+  teams: 5,
+  brands: 8,
+  affiliates: 4000,
+  work: 8000,
+  followups: 5000,
+  tasks: 5000,
+  issues: 5000,
+  activity: 10000,
+  performance: 15000,
+});
+console.log(
+  "Production-scale read fixture, scoping, bounds, search, and enrichment tests passed",
+);

@@ -1,16 +1,452 @@
-var ISSUE_TYPES_=['ACCOUNT','PAYMENT','COMMISSION','TRACKING','TECHNICAL','CONTACT','COMPLIANCE','AFFILIATE_REQUEST','OTHER'];
-var ISSUE_PRIORITIES_=['LOW','NORMAL','HIGH','URGENT'];
-var ISSUE_STATUSES_=['OPEN','IN_PROGRESS','RESOLVED','CLOSED'];
-function issueAdmin_(u){return ['ADMIN','SUPER_ADMIN'].indexOf(String(u.Role))>=0}
-function issueMaps_(){var build=function(){var staff={},affiliates={},brands={},assignments={},activeByAffiliate={};rows_('Staff_List').forEach(function(r){staff[String(r.Staff_ID)]=r});rows_('Affiliates').forEach(function(r){affiliates[String(r.Affiliate_ID)]=r});rows_('Brand_List').forEach(function(r){brands[String(r.Brand_ID)]=r});rows_('Assignments').forEach(function(r){assignments[String(r.Assignment_ID)]=r;if(r.Status==='ACTIVE'&&!activeByAffiliate[String(r.Affiliate_ID)])activeByAffiliate[String(r.Affiliate_ID)]=r});return {staff:staff,affiliates:affiliates,brands:brands,assignments:assignments,activeByAffiliate:activeByAffiliate}};return typeof requestMemo_==='function'?requestMemo_('issues:maps',build):build()}
-function issueVisible_(u,issue,m){if(issueAdmin_(u))return true;var affiliate=m.affiliates[String(issue.Affiliate_ID)];if(!affiliate)return false;var active=m.activeByAffiliate[String(issue.Affiliate_ID)];return Boolean(active&&String(active.Staff_ID)===String(u.Staff_ID))}
-function issueSafe_(issue,m){var affiliate=m.affiliates[String(issue.Affiliate_ID)]||{},assignment=m.assignments[String(issue.Assignment_ID)]||{},brand=m.brands[String(issue.Brand_ID||assignment.Brand_ID||affiliate.Brand_ID)]||{},reporter=m.staff[String(issue.Reported_By)]||{},owner=m.staff[String(issue.Assigned_To)]||{};return {issueId:String(issue.Issue_ID||''),affiliateId:String(issue.Affiliate_ID||''),assignmentId:String(issue.Assignment_ID||''),affiliateUsername:String(affiliate.Affiliate_Username||''),affiliateName:String(affiliate.Affiliate_Name||''),brandId:String(brand.Brand_ID||issue.Brand_ID||affiliate.Brand_ID||''),brandName:String(brand.Brand_Name||''),brandCode:String(brand.Brand_Code||''),issueType:String(issue.Issue_Type||'OTHER'),priority:String(issue.Priority||'NORMAL'),status:String(issue.Status||'OPEN'),title:String(issue.Title||''),description:String(issue.Description||''),reportedById:String(issue.Reported_By||''),reportedByName:String(reporter.Display_Name||reporter.Username||'Unknown reporter'),assignedToId:String(issue.Assigned_To||''),assignedToName:String(owner.Display_Name||owner.Username||''),ownerActive:owner.Status==='ACTIVE',reportedAt:String(issue.Reported_At||issue.Created_At||''),dueAt:String(issue.Due_At||''),resolvedAt:String(issue.Resolved_At||''),resolution:String(issue.Resolution||''),escalationLevel:Number(issue.Escalation_Level)||0,sourceInteractionId:String(issue.Source_Interaction_ID||''),createdAt:String(issue.Created_At||issue.Reported_At||''),updatedAt:String(issue.Updated_At||issue.Created_At||issue.Reported_At||'')}}
-function issues_(u,p){p=p||{};var m=issueMaps_(),candidates=rows_('Issues').filter(function(issue){return issueVisible_(u,issue,m)}),rank={URGENT:0,HIGH:1,NORMAL:2,LOW:3},summary={open:0,inProgress:0,urgent:0,resolved:0,closed:0};candidates.forEach(function(x){var status=String(x.Status||'OPEN'),priority=String(x.Priority||'NORMAL');if(status==='OPEN')summary.open++;if(status==='IN_PROGRESS')summary.inProgress++;if(priority==='URGENT'&&status!=='CLOSED')summary.urgent++;if(status==='RESOLVED')summary.resolved++;if(status==='CLOSED')summary.closed++});candidates.sort(function(a,b){var as=String(a.Status||'OPEN'),bs=String(b.Status||'OPEN'),ac=as==='CLOSED'?1:0,bc=bs==='CLOSED'?1:0,ap=String(a.Priority||'NORMAL'),bp=String(b.Priority||'NORMAL');return ac-bc||(rank[ap]===undefined?4:rank[ap])-(rank[bp]===undefined?4:rank[bp])||issueTime_(b.Updated_At||b.Created_At||b.Reported_At)-issueTime_(a.Updated_At||a.Created_At||a.Reported_At)||String(a.Issue_ID).localeCompare(String(b.Issue_ID))});var size=Math.max(1,Math.min(Number(p.pageSize)||500,500)),page=Math.max(1,Number(p.page)||1),start=(page-1)*size,response={items:candidates.slice(start,start+size).map(function(issue){return issueSafe_(issue,m)}),page:page,pageSize:size,total:candidates.length,summary:summary,canManage:issueAdmin_(u),options:{affiliates:[],staff:[]}};if(issueAdmin_(u))response.options.staff=Object.keys(m.staff).map(function(id){return m.staff[id]}).filter(function(s){return s.Role==='STAFF'&&s.Status==='ACTIVE'}).map(function(s){return {staffId:String(s.Staff_ID),displayName:String(s.Display_Name||s.Username),team:String(s.Team||'')}});return response}
-function issueTime_(value){var n=value?new Date(value).getTime():NaN;return isFinite(n)?n:0}
-function issueEnum_(value,allowed,label){value=String(value||'').toUpperCase();if(allowed.indexOf(value)<0)throw apiError_('VALIDATION_FAILED','Invalid '+label+'.');return value}
-function issueText_(value,label,max){value=String(value||'').trim();if(!value)throw apiError_('VALIDATION_FAILED',label+' is required.');if(value.length>max)throw apiError_('VALIDATION_FAILED',label+' is too long.');return value}
-function createIssue_(u,p){var lock=LockService.getScriptLock(),row;lock.waitLock(30000);try{clearCache_('Issues');var m=issueMaps_(),affiliateId=String(p.affiliateId||''),affiliate=m.affiliates[affiliateId],assignment=m.activeByAffiliate[affiliateId];if(!affiliate)throw apiError_('NOT_FOUND','Affiliate not found.');if(!assignment)throw apiError_('INVALID_STATE','Affiliate has no active assignment.');var assignmentOwner=m.staff[String(assignment.Staff_ID)];if(!assignmentOwner||assignmentOwner.Role!=='STAFF'||assignmentOwner.Status!=='ACTIVE')throw apiError_('INVALID_STATE','Affiliate assignment does not have an active STAFF owner.');if(!issueAdmin_(u)&&String(assignment.Staff_ID)!==String(u.Staff_ID))throw apiError_('FORBIDDEN','Access denied.');var t=now_(),priority=issueEnum_(p.priority||'NORMAL',ISSUE_PRIORITIES_,'priority');row={Issue_ID:nextIdUnlocked_('Issue'),Affiliate_ID:affiliateId,Assignment_ID:assignment.Assignment_ID,Reported_By:u.Staff_ID,Assigned_To:assignment.Staff_ID,Brand_ID:assignment.Brand_ID||affiliate.Brand_ID||'',Issue_Type:issueEnum_(p.issueType,ISSUE_TYPES_,'issue type'),Priority:priority,Status:'OPEN',Title:issueText_(p.title,'Title',160),Description:issueText_(p.description,'Description',2000),Reported_At:t,Due_At:'',Resolved_At:'',Resolution:'',Escalation_Level:priority==='URGENT'?1:0,Source_Interaction_ID:'',Created_At:t,Updated_At:t};appendRows_('Issues',[row])}finally{lock.releaseLock()}audit_(u,'ISSUE_CREATED','Issue',row.Issue_ID,row.Affiliate_ID,null,{issueId:row.Issue_ID,affiliateId:row.Affiliate_ID,assignmentId:row.Assignment_ID,reportedBy:row.Reported_By,assignedTo:row.Assigned_To,type:row.Issue_Type,priority:row.Priority,status:row.Status},{requestId:p.requestId});return issueSafe_(row,issueMaps_())}
-function issueForAdmin_(u,id,m){requireRole_(u,['ADMIN','SUPER_ADMIN']);var issue=rows_('Issues').filter(function(r){return String(r.Issue_ID)===String(id)})[0];if(!issue)throw apiError_('NOT_FOUND','Issue not found.');if(!issueVisible_(u,issue,m))throw apiError_('FORBIDDEN','Access denied.');return issue}
-function issueAppendResolution_(current,text,label,u){var entry='['+now_()+'] '+label+' by '+String(u.Display_Name||u.Username||u.Staff_ID);if(text)entry+=': '+String(text).trim().slice(0,1800);return current?String(current)+'\n'+entry:entry}
-function updateIssueStatus_(u,p){var next=issueEnum_(p.status,ISSUE_STATUSES_,'issue status'),allowed={OPEN:{IN_PROGRESS:true,RESOLVED:true},IN_PROGRESS:{RESOLVED:true},RESOLVED:{CLOSED:true,IN_PROGRESS:true},CLOSED:{}},lock=LockService.getScriptLock(),issue,before,action,changes;lock.waitLock(30000);try{clearCache_('Issues');var m=issueMaps_();issue=issueForAdmin_(u,p.issueId,m);if(!allowed[String(issue.Status)]||!allowed[String(issue.Status)][next])throw apiError_('INVALID_STATE','This issue status transition is not allowed.');var t=now_();changes={Status:next,Updated_At:t};if(next==='IN_PROGRESS'&&issue.Status==='OPEN')action='ISSUE_STARTED';else if(next==='RESOLVED'){var resolution=issueText_(p.resolution,'Resolution',1800);action='ISSUE_RESOLVED';changes.Resolved_At=t;changes.Resolution=issueAppendResolution_(issue.Resolution,resolution,'Resolved',u)}else if(next==='CLOSED')action='ISSUE_CLOSED';else if(next==='IN_PROGRESS'&&issue.Status==='RESOLVED'){action='ISSUE_REOPENED';changes.Resolution=issueAppendResolution_(issue.Resolution,String(p.resolution||''),'Reopened',u)}before=updateById_('Issues','Issue_ID',issue.Issue_ID,changes);Object.keys(changes).forEach(function(k){issue[k]=changes[k]})}finally{lock.releaseLock()}audit_(u,action,'Issue',issue.Issue_ID,issue.Affiliate_ID,{status:before.Status},{status:issue.Status,resolution:changes.Resolution||''},{requestId:p.requestId});return issueSafe_(issue,issueMaps_())}
-function assignIssue_(u,p){var lock=LockService.getScriptLock(),issue,before;lock.waitLock(30000);try{clearCache_('Issues');var m=issueMaps_();issue=issueForAdmin_(u,p.issueId,m);if(issue.Status==='CLOSED')throw apiError_('INVALID_STATE','Closed issues cannot be reassigned.');var owner=m.staff[String(p.staffId)];if(!owner||owner.Role!=='STAFF'||owner.Status!=='ACTIVE')throw apiError_('VALIDATION_FAILED','Select an active STAFF owner.');var changes={Assigned_To:owner.Staff_ID,Updated_At:now_()};before=updateById_('Issues','Issue_ID',issue.Issue_ID,changes);Object.keys(changes).forEach(function(k){issue[k]=changes[k]})}finally{lock.releaseLock()}audit_(u,'ISSUE_REASSIGNED','Issue',issue.Issue_ID,issue.Affiliate_ID,{assignedTo:before.Assigned_To},{assignedTo:issue.Assigned_To},{requestId:p.requestId});return issueSafe_(issue,issueMaps_())}
+var ISSUE_TYPES_ = [
+  "ACCOUNT",
+  "PAYMENT",
+  "COMMISSION",
+  "TRACKING",
+  "TECHNICAL",
+  "CONTACT",
+  "COMPLIANCE",
+  "AFFILIATE_REQUEST",
+  "OTHER",
+];
+var ISSUE_PRIORITIES_ = ["LOW", "NORMAL", "HIGH", "URGENT"];
+var ISSUE_STATUSES_ = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+function issueAdmin_(u) {
+  return ["ADMIN", "SUPER_ADMIN"].indexOf(String(u.Role)) >= 0;
+}
+function issueMaps_() {
+  var build = function () {
+    var staff = {},
+      affiliates = {},
+      brands = {},
+      assignments = {},
+      activeByAffiliate = {};
+    rows_("Staff_List").forEach(function (r) {
+      staff[String(r.Staff_ID)] = r;
+    });
+    rows_("Affiliates").forEach(function (r) {
+      affiliates[String(r.Affiliate_ID)] = r;
+    });
+    rows_("Brand_List").forEach(function (r) {
+      brands[String(r.Brand_ID)] = r;
+    });
+    rows_("Assignments").forEach(function (r) {
+      assignments[String(r.Assignment_ID)] = r;
+      if (r.Status === "ACTIVE" && !activeByAffiliate[String(r.Affiliate_ID)])
+        activeByAffiliate[String(r.Affiliate_ID)] = r;
+    });
+    return {
+      staff: staff,
+      affiliates: affiliates,
+      brands: brands,
+      assignments: assignments,
+      activeByAffiliate: activeByAffiliate,
+    };
+  };
+  return typeof requestMemo_ === "function"
+    ? requestMemo_("issues:maps", build)
+    : build();
+}
+function issueVisible_(u, issue, m) {
+  if (issueAdmin_(u)) return true;
+  var affiliate = m.affiliates[String(issue.Affiliate_ID)];
+  if (!affiliate) return false;
+  var active = m.activeByAffiliate[String(issue.Affiliate_ID)];
+  return Boolean(active && String(active.Staff_ID) === String(u.Staff_ID));
+}
+function issueSafe_(issue, m) {
+  var affiliate = m.affiliates[String(issue.Affiliate_ID)] || {},
+    assignment = m.assignments[String(issue.Assignment_ID)] || {},
+    brand =
+      m.brands[
+        String(issue.Brand_ID || assignment.Brand_ID || affiliate.Brand_ID)
+      ] || {},
+    reporter = m.staff[String(issue.Reported_By)] || {},
+    owner = m.staff[String(issue.Assigned_To)] || {};
+  return {
+    issueId: String(issue.Issue_ID || ""),
+    affiliateId: String(issue.Affiliate_ID || ""),
+    assignmentId: String(issue.Assignment_ID || ""),
+    affiliateUsername: String(affiliate.Affiliate_Username || ""),
+    affiliateName: String(affiliate.Affiliate_Name || ""),
+    brandId: String(
+      brand.Brand_ID || issue.Brand_ID || affiliate.Brand_ID || "",
+    ),
+    brandName: String(brand.Brand_Name || ""),
+    brandCode: String(brand.Brand_Code || ""),
+    issueType: String(issue.Issue_Type || "OTHER"),
+    priority: String(issue.Priority || "NORMAL"),
+    status: String(issue.Status || "OPEN"),
+    title: String(issue.Title || ""),
+    description: String(issue.Description || ""),
+    reportedById: String(issue.Reported_By || ""),
+    reportedByName: String(
+      reporter.Display_Name || reporter.Username || "Unknown reporter",
+    ),
+    assignedToId: String(issue.Assigned_To || ""),
+    assignedToName: String(owner.Display_Name || owner.Username || ""),
+    ownerActive: owner.Status === "ACTIVE",
+    reportedAt: String(issue.Reported_At || issue.Created_At || ""),
+    dueAt: String(issue.Due_At || ""),
+    resolvedAt: String(issue.Resolved_At || ""),
+    resolution: String(issue.Resolution || ""),
+    escalationLevel: Number(issue.Escalation_Level) || 0,
+    sourceInteractionId: String(issue.Source_Interaction_ID || ""),
+    createdAt: String(issue.Created_At || issue.Reported_At || ""),
+    updatedAt: String(
+      issue.Updated_At || issue.Created_At || issue.Reported_At || "",
+    ),
+  };
+}
+function issues_(u, p) {
+  p = p || {};
+  var m = issueMaps_(),
+    admin = issueAdmin_(u),
+    candidates = rows_("Issues").filter(function (issue) {
+      return issueVisible_(u, issue, m);
+    }),
+    rank = { URGENT: 0, HIGH: 1, NORMAL: 2, LOW: 3 },
+    summary = { open: 0, inProgress: 0, urgent: 0, resolved: 0, closed: 0 };
+  candidates.forEach(function (x) {
+    var status = String(x.Status || "OPEN"),
+      priority = String(x.Priority || "NORMAL");
+    if (status === "OPEN") summary.open++;
+    if (status === "IN_PROGRESS") summary.inProgress++;
+    if (priority === "URGENT" && status !== "CLOSED") summary.urgent++;
+    if (status === "RESOLVED") summary.resolved++;
+    if (status === "CLOSED") summary.closed++;
+  });
+  var card = String(p.card || "all"),
+    query = String(p.search || "")
+      .trim()
+      .toLowerCase();
+  candidates = candidates.filter(function (x) {
+    var status = String(x.Status || "OPEN"),
+      priority = String(x.Priority || "NORMAL"),
+      affiliate = m.affiliates[String(x.Affiliate_ID)] || {},
+      assignment = m.assignments[String(x.Assignment_ID)] || {},
+      brand =
+        m.brands[
+          String(x.Brand_ID || assignment.Brand_ID || affiliate.Brand_ID)
+        ] || {},
+      reporter = m.staff[String(x.Reported_By)] || {},
+      owner = m.staff[String(x.Assigned_To)] || {};
+    if (
+      card !== "all" &&
+      (card === "URGENT"
+        ? priority !== "URGENT" || status === "CLOSED"
+        : status !== card)
+    )
+      return false;
+    if (
+      (p.status && status !== String(p.status)) ||
+      (p.priority && priority !== String(p.priority)) ||
+      (p.issueType && String(x.Issue_Type) !== String(p.issueType)) ||
+      (p.brand &&
+        String(brand.Brand_ID || x.Brand_ID || affiliate.Brand_ID) !==
+          String(p.brand)) ||
+      (admin &&
+        p.staffId &&
+        String(x.Assigned_To) !== String(p.staffId) &&
+        String(x.Reported_By) !== String(p.staffId))
+    )
+      return false;
+    if (
+      query &&
+      [
+        x.Issue_ID,
+        x.Title,
+        x.Description,
+        affiliate.Affiliate_Username,
+        affiliate.Affiliate_Name,
+        brand.Brand_Name,
+        brand.Brand_Code,
+        x.Issue_Type,
+        reporter.Display_Name,
+        reporter.Username,
+        owner.Display_Name,
+        owner.Username,
+        x.Resolution,
+      ].every(function (v) {
+        return (
+          String(v || "")
+            .toLowerCase()
+            .indexOf(query) < 0
+        );
+      })
+    )
+      return false;
+    return true;
+  });
+  candidates.sort(function (a, b) {
+    var as = String(a.Status || "OPEN"),
+      bs = String(b.Status || "OPEN"),
+      ac = as === "CLOSED" ? 1 : 0,
+      bc = bs === "CLOSED" ? 1 : 0,
+      ap = String(a.Priority || "NORMAL"),
+      bp = String(b.Priority || "NORMAL");
+    return (
+      ac - bc ||
+      (rank[ap] === undefined ? 4 : rank[ap]) -
+        (rank[bp] === undefined ? 4 : rank[bp]) ||
+      issueTime_(b.Updated_At || b.Created_At || b.Reported_At) -
+        issueTime_(a.Updated_At || a.Created_At || a.Reported_At) ||
+      String(a.Issue_ID).localeCompare(String(b.Issue_ID))
+    );
+  });
+  var size = Math.max(1, Math.min(Number(p.pageSize) || 50, 100)),
+    page = Math.max(1, Number(p.page) || 1),
+    start = (page - 1) * size,
+    response = {
+      items: candidates.slice(start, start + size).map(function (issue) {
+        return issueSafe_(issue, m);
+      }),
+      page: page,
+      pageSize: size,
+      total: candidates.length,
+      summary: summary,
+      canManage: admin,
+      options: { affiliates: [], staff: [], brands: [] },
+    };
+  response.options.brands = Object.keys(m.brands)
+    .map(function (id) {
+      return m.brands[id];
+    })
+    .map(function (b) {
+      return {
+        brandId: String(b.Brand_ID),
+        brandName: String(b.Brand_Name || b.Brand_Code || b.Brand_ID),
+      };
+    });
+  if (admin)
+    response.options.staff = Object.keys(m.staff)
+      .map(function (id) {
+        return m.staff[id];
+      })
+      .filter(function (s) {
+        return s.Role === "STAFF" && s.Status === "ACTIVE";
+      })
+      .map(function (s) {
+        return {
+          staffId: String(s.Staff_ID),
+          displayName: String(s.Display_Name || s.Username),
+          team: String(s.Team || ""),
+        };
+      });
+  return response;
+}
+function issueTime_(value) {
+  var n = value ? new Date(value).getTime() : NaN;
+  return isFinite(n) ? n : 0;
+}
+function issueEnum_(value, allowed, label) {
+  value = String(value || "").toUpperCase();
+  if (allowed.indexOf(value) < 0)
+    throw apiError_("VALIDATION_FAILED", "Invalid " + label + ".");
+  return value;
+}
+function issueText_(value, label, max) {
+  value = String(value || "").trim();
+  if (!value) throw apiError_("VALIDATION_FAILED", label + " is required.");
+  if (value.length > max)
+    throw apiError_("VALIDATION_FAILED", label + " is too long.");
+  return value;
+}
+function createIssue_(u, p) {
+  var lock = LockService.getScriptLock(),
+    row;
+  lock.waitLock(30000);
+  try {
+    clearCache_("Issues");
+    var m = issueMaps_(),
+      affiliateId = String(p.affiliateId || ""),
+      affiliate = m.affiliates[affiliateId],
+      assignment = m.activeByAffiliate[affiliateId];
+    if (!affiliate) throw apiError_("NOT_FOUND", "Affiliate not found.");
+    if (!assignment)
+      throw apiError_("INVALID_STATE", "Affiliate has no active assignment.");
+    var assignmentOwner = m.staff[String(assignment.Staff_ID)];
+    if (
+      !assignmentOwner ||
+      assignmentOwner.Role !== "STAFF" ||
+      assignmentOwner.Status !== "ACTIVE"
+    )
+      throw apiError_(
+        "INVALID_STATE",
+        "Affiliate assignment does not have an active STAFF owner.",
+      );
+    if (!issueAdmin_(u) && String(assignment.Staff_ID) !== String(u.Staff_ID))
+      throw apiError_("FORBIDDEN", "Access denied.");
+    var t = now_(),
+      priority = issueEnum_(
+        p.priority || "NORMAL",
+        ISSUE_PRIORITIES_,
+        "priority",
+      );
+    row = {
+      Issue_ID: nextIdUnlocked_("Issue"),
+      Affiliate_ID: affiliateId,
+      Assignment_ID: assignment.Assignment_ID,
+      Reported_By: u.Staff_ID,
+      Assigned_To: assignment.Staff_ID,
+      Brand_ID: assignment.Brand_ID || affiliate.Brand_ID || "",
+      Issue_Type: issueEnum_(p.issueType, ISSUE_TYPES_, "issue type"),
+      Priority: priority,
+      Status: "OPEN",
+      Title: issueText_(p.title, "Title", 160),
+      Description: issueText_(p.description, "Description", 2000),
+      Reported_At: t,
+      Due_At: "",
+      Resolved_At: "",
+      Resolution: "",
+      Escalation_Level: priority === "URGENT" ? 1 : 0,
+      Source_Interaction_ID: "",
+      Created_At: t,
+      Updated_At: t,
+    };
+    appendRows_("Issues", [row]);
+  } finally {
+    lock.releaseLock();
+  }
+  audit_(
+    u,
+    "ISSUE_CREATED",
+    "Issue",
+    row.Issue_ID,
+    row.Affiliate_ID,
+    null,
+    {
+      issueId: row.Issue_ID,
+      affiliateId: row.Affiliate_ID,
+      assignmentId: row.Assignment_ID,
+      reportedBy: row.Reported_By,
+      assignedTo: row.Assigned_To,
+      type: row.Issue_Type,
+      priority: row.Priority,
+      status: row.Status,
+    },
+    { requestId: p.requestId },
+  );
+  return issueSafe_(row, issueMaps_());
+}
+function issueForAdmin_(u, id, m) {
+  requireRole_(u, ["ADMIN", "SUPER_ADMIN"]);
+  var issue = rows_("Issues").filter(function (r) {
+    return String(r.Issue_ID) === String(id);
+  })[0];
+  if (!issue) throw apiError_("NOT_FOUND", "Issue not found.");
+  if (!issueVisible_(u, issue, m))
+    throw apiError_("FORBIDDEN", "Access denied.");
+  return issue;
+}
+function issueAppendResolution_(current, text, label, u) {
+  var entry =
+    "[" +
+    now_() +
+    "] " +
+    label +
+    " by " +
+    String(u.Display_Name || u.Username || u.Staff_ID);
+  if (text) entry += ": " + String(text).trim().slice(0, 1800);
+  return current ? String(current) + "\n" + entry : entry;
+}
+function updateIssueStatus_(u, p) {
+  var next = issueEnum_(p.status, ISSUE_STATUSES_, "issue status"),
+    allowed = {
+      OPEN: { IN_PROGRESS: true, RESOLVED: true },
+      IN_PROGRESS: { RESOLVED: true },
+      RESOLVED: { CLOSED: true, IN_PROGRESS: true },
+      CLOSED: {},
+    },
+    lock = LockService.getScriptLock(),
+    issue,
+    before,
+    action,
+    changes;
+  lock.waitLock(30000);
+  try {
+    clearCache_("Issues");
+    var m = issueMaps_();
+    issue = issueForAdmin_(u, p.issueId, m);
+    if (!allowed[String(issue.Status)] || !allowed[String(issue.Status)][next])
+      throw apiError_(
+        "INVALID_STATE",
+        "This issue status transition is not allowed.",
+      );
+    var t = now_();
+    changes = { Status: next, Updated_At: t };
+    if (next === "IN_PROGRESS" && issue.Status === "OPEN")
+      action = "ISSUE_STARTED";
+    else if (next === "RESOLVED") {
+      var resolution = issueText_(p.resolution, "Resolution", 1800);
+      action = "ISSUE_RESOLVED";
+      changes.Resolved_At = t;
+      changes.Resolution = issueAppendResolution_(
+        issue.Resolution,
+        resolution,
+        "Resolved",
+        u,
+      );
+    } else if (next === "CLOSED") action = "ISSUE_CLOSED";
+    else if (next === "IN_PROGRESS" && issue.Status === "RESOLVED") {
+      action = "ISSUE_REOPENED";
+      changes.Resolution = issueAppendResolution_(
+        issue.Resolution,
+        String(p.resolution || ""),
+        "Reopened",
+        u,
+      );
+    }
+    before = updateById_("Issues", "Issue_ID", issue.Issue_ID, changes);
+    Object.keys(changes).forEach(function (k) {
+      issue[k] = changes[k];
+    });
+  } finally {
+    lock.releaseLock();
+  }
+  audit_(
+    u,
+    action,
+    "Issue",
+    issue.Issue_ID,
+    issue.Affiliate_ID,
+    { status: before.Status },
+    { status: issue.Status, resolution: changes.Resolution || "" },
+    { requestId: p.requestId },
+  );
+  return issueSafe_(issue, issueMaps_());
+}
+function assignIssue_(u, p) {
+  var lock = LockService.getScriptLock(),
+    issue,
+    before;
+  lock.waitLock(30000);
+  try {
+    clearCache_("Issues");
+    var m = issueMaps_();
+    issue = issueForAdmin_(u, p.issueId, m);
+    if (issue.Status === "CLOSED")
+      throw apiError_("INVALID_STATE", "Closed issues cannot be reassigned.");
+    var owner = m.staff[String(p.staffId)];
+    if (!owner || owner.Role !== "STAFF" || owner.Status !== "ACTIVE")
+      throw apiError_("VALIDATION_FAILED", "Select an active STAFF owner.");
+    var changes = { Assigned_To: owner.Staff_ID, Updated_At: now_() };
+    before = updateById_("Issues", "Issue_ID", issue.Issue_ID, changes);
+    Object.keys(changes).forEach(function (k) {
+      issue[k] = changes[k];
+    });
+  } finally {
+    lock.releaseLock();
+  }
+  audit_(
+    u,
+    "ISSUE_REASSIGNED",
+    "Issue",
+    issue.Issue_ID,
+    issue.Affiliate_ID,
+    { assignedTo: before.Assigned_To },
+    { assignedTo: issue.Assigned_To },
+    { requestId: p.requestId },
+  );
+  return issueSafe_(issue, issueMaps_());
+}

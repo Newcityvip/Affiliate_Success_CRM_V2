@@ -1,15 +1,530 @@
-var TASK_OPEN_={PENDING:true,IN_PROGRESS:true};
-function taskAdmin_(u){return ['ADMIN','SUPER_ADMIN'].indexOf(String(u.Role))>=0}
-function taskMaps_(){var build=function(){var staff={},affiliates={},brands={},assignments={},activeByAffiliate={};rows_('Staff_List').forEach(function(r){staff[String(r.Staff_ID)]=r});rows_('Affiliates').forEach(function(r){affiliates[String(r.Affiliate_ID)]=r});rows_('Brand_List').forEach(function(r){brands[String(r.Brand_ID)]=r});rows_('Assignments').forEach(function(r){assignments[String(r.Assignment_ID)]=r;if(r.Status==='ACTIVE')activeByAffiliate[String(r.Affiliate_ID)]=r});return {staff:staff,affiliates:affiliates,brands:brands,assignments:assignments,activeByAffiliate:activeByAffiliate}};return typeof requestMemo_==='function'?requestMemo_('tasks:maps',build):build()}
-function taskVisible_(u,t,m){var owner=m.staff[String(t.Staff_ID)],status=String(t.Status),affiliateId=String(t.Affiliate_ID||'');if(!owner)return false;if(!affiliateId)return taskAdmin_(u)||String(t.Staff_ID)===String(u.Staff_ID);var affiliate=m.affiliates[affiliateId],assignment=m.assignments[String(t.Assignment_ID)],active=m.activeByAffiliate[affiliateId];if(!affiliate||!assignment||String(assignment.Affiliate_ID)!==affiliateId||String(assignment.Staff_ID)!==String(t.Staff_ID))return false;if(TASK_OPEN_[status]&&(!active||String(active.Assignment_ID)!==String(assignment.Assignment_ID)||String(active.Staff_ID)!==String(t.Staff_ID)))return false;return taskAdmin_(u)||String(t.Staff_ID)===String(u.Staff_ID)&&assignment.Status==='ACTIVE'}
-function taskSafe_(t,m){var affiliate=m.affiliates[String(t.Affiliate_ID)]||{},owner=m.staff[String(t.Staff_ID)]||{},assignment=m.assignments[String(t.Assignment_ID)]||{},brand=m.brands[String(assignment.Brand_ID||affiliate.Brand_ID)]||{},due=String(t.Due_At||''),dueMs=due?new Date(due).getTime():NaN,now=Date.now(),today=new Date(now),dueDate=isFinite(dueMs)?new Date(dueMs):null;return {taskId:String(t.Task_ID),affiliateId:String(t.Affiliate_ID||''),assignmentId:String(t.Assignment_ID||''),staffId:String(t.Staff_ID),ownerName:String(owner.Display_Name||owner.Username||''),ownerActive:owner.Status==='ACTIVE',affiliateUsername:String(affiliate.Affiliate_Username||''),affiliateName:String(affiliate.Affiliate_Name||''),brandId:String(brand.Brand_ID||affiliate.Brand_ID||''),brandName:String(brand.Brand_Name||''),brandCode:String(brand.Brand_Code||''),taskType:String(t.Task_Type||''),title:String(t.Title||''),description:String(t.Description||''),priority:String(t.Priority||'NORMAL'),status:String(t.Status||''),dueAt:due,startedAt:String(t.Started_At||''),completedAt:String(t.Completed_At||''),completionNotes:String(t.Completion_Notes||''),createdAt:String(t.Created_At||''),updatedAt:String(t.Updated_At||''),overdue:Boolean(TASK_OPEN_[String(t.Status)]&&isFinite(dueMs)&&dueMs<now),dueToday:Boolean(TASK_OPEN_[String(t.Status)]&&dueDate&&dueDate.getFullYear()===today.getFullYear()&&dueDate.getMonth()===today.getMonth()&&dueDate.getDate()===today.getDate())}}
-function tasks_(u,p){p=p||{};var m=taskMaps_(),candidates=rows_('Tasks').filter(function(t){return taskVisible_(u,t,m)}),rank={HIGH:0,NORMAL:1,LOW:2},now=Date.now(),today=new Date(now),summary={open:0,overdue:0,dueToday:0,high:0,completed:0};function state_(t){var status=String(t.Status),due=taskTime_(t.Due_At),date=isFinite(due)?new Date(due):null,open=Boolean(TASK_OPEN_[status]);return {status:status,open:open,overdue:open&&due<now,dueToday:Boolean(open&&date&&date.getFullYear()===today.getFullYear()&&date.getMonth()===today.getMonth()&&date.getDate()===today.getDate()),due:due}}candidates.forEach(function(t){var s=state_(t);if(s.open)summary.open++;if(s.overdue)summary.overdue++;if(s.dueToday)summary.dueToday++;if(s.open&&String(t.Priority)==='HIGH')summary.high++;if(s.status==='COMPLETED')summary.completed++});candidates.sort(function(a,b){var as=state_(a),bs=state_(b);if(as.open!==bs.open)return as.open?-1:1;if(as.overdue!==bs.overdue)return as.overdue?-1:1;var ar=rank[String(a.Priority)]===undefined?3:rank[String(a.Priority)],br=rank[String(b.Priority)]===undefined?3:rank[String(b.Priority)];return ar-br||as.due-bs.due||String(a.Task_ID).localeCompare(String(b.Task_ID))});var size=Math.max(1,Math.min(Number(p.pageSize)||50,100)),page=Math.max(1,Number(p.page)||1),start=(page-1)*size,response={items:candidates.slice(start,start+size).map(function(t){return taskSafe_(t,m)}),page:page,pageSize:size,total:candidates.length,summary:summary,canManage:taskAdmin_(u),options:{staff:[],affiliates:[]}};if(taskAdmin_(u))response.options.staff=Object.keys(m.staff).map(function(id){return m.staff[id]}).filter(function(s){return s.Role==='STAFF'&&s.Status==='ACTIVE'}).map(function(s){return {staffId:String(s.Staff_ID),displayName:String(s.Display_Name||s.Username),team:String(s.Team||'')}});return response}
-function taskTime_(value){var n=value?new Date(value).getTime():NaN;return isFinite(n)?n:Infinity}
-function taskText_(value,label,max){value=String(value||'').trim();if(!value)throw apiError_('VALIDATION_FAILED',label+' is required.');if(value.length>max)throw apiError_('VALIDATION_FAILED',label+' is too long.');return value}
-function taskTarget_(staffId,m){var s=m.staff[String(staffId)];if(!s||s.Role!=='STAFF'||s.Status!=='ACTIVE')throw apiError_('VALIDATION_FAILED','Select an active STAFF owner.');return s}
-function createTask_(u,p){requireRole_(u,['ADMIN','SUPER_ADMIN']);var lock=LockService.getScriptLock(),row,duplicate;lock.waitLock(30000);try{clearCache_('Tasks');var m=taskMaps_(),owner=taskTarget_(p.staffId,m),affiliateId=String(p.affiliateId||''),assignmentId='';if(affiliateId){var affiliate=m.affiliates[affiliateId],assignment=m.activeByAffiliate[affiliateId];if(!affiliate)throw apiError_('NOT_FOUND','Affiliate not found.');if(!assignment||String(assignment.Staff_ID)!==String(owner.Staff_ID))throw apiError_('INVALID_STATE','The selected staff member does not own the affiliate active assignment.');assignmentId=String(assignment.Assignment_ID)}var clientId=String(p.clientRequestId||'');if(clientId)duplicate=rows_('Tasks').filter(function(t){return String(t.Request_ID)===clientId&&String(t.Created_By)===String(u.Staff_ID)})[0];if(duplicate){row=duplicate}else{var t=now_();row={Task_ID:nextIdUnlocked_('Task'),Affiliate_ID:affiliateId,Assignment_ID:assignmentId,Staff_ID:owner.Staff_ID,Task_Type:taskText_(p.taskType,'Task type',80),Title:taskText_(p.title,'Title',160),Description:String(p.description||'').trim().slice(0,2000),Priority:['HIGH','NORMAL','LOW'].indexOf(String(p.priority))>=0?String(p.priority):'NORMAL',Status:'PENDING',Due_At:String(p.dueAt||''),Started_At:'',Completed_At:'',Completion_Notes:'',Created_By:u.Staff_ID,Created_At:t,Updated_By:u.Staff_ID,Updated_At:t,Request_ID:clientId};appendRows_('Tasks',[row])}}finally{lock.releaseLock()}if(!duplicate)audit_(u,'TASK_CREATED','Task',row.Task_ID,row.Affiliate_ID,null,{taskId:row.Task_ID,staffId:row.Staff_ID,affiliateId:row.Affiliate_ID,status:row.Status},{requestId:p.requestId});return taskSafe_(row,taskMaps_())}
-function taskForMutation_(u,id,m){var task=rows_('Tasks').filter(function(t){return String(t.Task_ID)===String(id)})[0];if(!task)throw apiError_('NOT_FOUND','Task not found.');if(!taskVisible_(u,task,m))throw apiError_('FORBIDDEN','Access denied.');return task}
-function startTask_(u,p){var lock=LockService.getScriptLock(),task,before;lock.waitLock(30000);try{clearCache_('Tasks');var m=taskMaps_();task=taskForMutation_(u,p.taskId,m);if(task.Status==='IN_PROGRESS')return taskSafe_(task,m);if(task.Status!=='PENDING')throw apiError_('INVALID_STATE','Task cannot be started.');var changes={Status:'IN_PROGRESS',Started_At:now_(),Updated_By:u.Staff_ID,Updated_At:now_()};before=updateById_('Tasks','Task_ID',task.Task_ID,changes);Object.keys(changes).forEach(function(k){task[k]=changes[k]})}finally{lock.releaseLock()}audit_(u,'TASK_STARTED','Task',task.Task_ID,task.Affiliate_ID,{status:before.Status},{status:'IN_PROGRESS'},{requestId:p.requestId});return taskSafe_(task,taskMaps_())}
-function completeTask_(u,p){var lock=LockService.getScriptLock(),task,before;lock.waitLock(30000);try{clearCache_('Tasks');var m=taskMaps_();task=taskForMutation_(u,p.taskId,m);if(task.Status==='COMPLETED')return taskSafe_(task,m);if(!TASK_OPEN_[String(task.Status)])throw apiError_('INVALID_STATE','Task cannot be completed.');var t=now_(),changes={Status:'COMPLETED',Completed_At:t,Completion_Notes:String(p.completionNotes||'').trim().slice(0,2000),Updated_By:u.Staff_ID,Updated_At:t};before=updateById_('Tasks','Task_ID',task.Task_ID,changes);Object.keys(changes).forEach(function(k){task[k]=changes[k]})}finally{lock.releaseLock()}audit_(u,'TASK_COMPLETED','Task',task.Task_ID,task.Affiliate_ID,{status:before.Status},{status:'COMPLETED',completionNotes:task.Completion_Notes},{requestId:p.requestId});return taskSafe_(task,taskMaps_())}
-function reassignTask_(u,p){requireRole_(u,['ADMIN','SUPER_ADMIN']);var lock=LockService.getScriptLock(),task,before;lock.waitLock(30000);try{clearCache_('Tasks');var m=taskMaps_();task=taskForMutation_(u,p.taskId,m);if(!TASK_OPEN_[String(task.Status)])throw apiError_('INVALID_STATE','Only open tasks can be reassigned.');var target=taskTarget_(p.staffId,m),assignmentId='';if(task.Affiliate_ID){var active=m.activeByAffiliate[String(task.Affiliate_ID)];if(!active||String(active.Staff_ID)!==String(target.Staff_ID))throw apiError_('INVALID_STATE','The target staff member does not own the affiliate active assignment.');assignmentId=String(active.Assignment_ID)}var changes={Staff_ID:target.Staff_ID,Assignment_ID:assignmentId,Updated_By:u.Staff_ID,Updated_At:now_()};before=updateById_('Tasks','Task_ID',task.Task_ID,changes);Object.keys(changes).forEach(function(k){task[k]=changes[k]})}finally{lock.releaseLock()}audit_(u,'TASK_REASSIGNED','Task',task.Task_ID,task.Affiliate_ID,{staffId:before.Staff_ID},{staffId:task.Staff_ID},{requestId:p.requestId});return taskSafe_(task,taskMaps_())}
-function cancelTask_(u,p){requireRole_(u,['ADMIN','SUPER_ADMIN']);var lock=LockService.getScriptLock(),task,before;lock.waitLock(30000);try{clearCache_('Tasks');var m=taskMaps_();task=taskForMutation_(u,p.taskId,m);if(task.Status==='CANCELLED')return taskSafe_(task,m);if(!TASK_OPEN_[String(task.Status)])throw apiError_('INVALID_STATE','Only open tasks can be cancelled.');var t=now_(),changes={Status:'CANCELLED',Completed_At:t,Completion_Notes:String(p.notes||'').trim().slice(0,2000),Updated_By:u.Staff_ID,Updated_At:t};before=updateById_('Tasks','Task_ID',task.Task_ID,changes);Object.keys(changes).forEach(function(k){task[k]=changes[k]})}finally{lock.releaseLock()}audit_(u,'TASK_CANCELLED','Task',task.Task_ID,task.Affiliate_ID,{status:before.Status},{status:'CANCELLED'},{requestId:p.requestId});return taskSafe_(task,taskMaps_())}
+var TASK_OPEN_ = { PENDING: true, IN_PROGRESS: true };
+function taskAdmin_(u) {
+  return ["ADMIN", "SUPER_ADMIN"].indexOf(String(u.Role)) >= 0;
+}
+function taskMaps_() {
+  var build = function () {
+    var staff = {},
+      affiliates = {},
+      brands = {},
+      assignments = {},
+      activeByAffiliate = {};
+    rows_("Staff_List").forEach(function (r) {
+      staff[String(r.Staff_ID)] = r;
+    });
+    rows_("Affiliates").forEach(function (r) {
+      affiliates[String(r.Affiliate_ID)] = r;
+    });
+    rows_("Brand_List").forEach(function (r) {
+      brands[String(r.Brand_ID)] = r;
+    });
+    rows_("Assignments").forEach(function (r) {
+      assignments[String(r.Assignment_ID)] = r;
+      if (r.Status === "ACTIVE") activeByAffiliate[String(r.Affiliate_ID)] = r;
+    });
+    return {
+      staff: staff,
+      affiliates: affiliates,
+      brands: brands,
+      assignments: assignments,
+      activeByAffiliate: activeByAffiliate,
+    };
+  };
+  return typeof requestMemo_ === "function"
+    ? requestMemo_("tasks:maps", build)
+    : build();
+}
+function taskVisible_(u, t, m) {
+  var owner = m.staff[String(t.Staff_ID)],
+    status = String(t.Status),
+    affiliateId = String(t.Affiliate_ID || "");
+  if (!owner) return false;
+  if (!affiliateId)
+    return taskAdmin_(u) || String(t.Staff_ID) === String(u.Staff_ID);
+  var affiliate = m.affiliates[affiliateId],
+    assignment = m.assignments[String(t.Assignment_ID)],
+    active = m.activeByAffiliate[affiliateId];
+  if (
+    !affiliate ||
+    !assignment ||
+    String(assignment.Affiliate_ID) !== affiliateId ||
+    String(assignment.Staff_ID) !== String(t.Staff_ID)
+  )
+    return false;
+  if (
+    TASK_OPEN_[status] &&
+    (!active ||
+      String(active.Assignment_ID) !== String(assignment.Assignment_ID) ||
+      String(active.Staff_ID) !== String(t.Staff_ID))
+  )
+    return false;
+  return (
+    taskAdmin_(u) ||
+    (String(t.Staff_ID) === String(u.Staff_ID) &&
+      assignment.Status === "ACTIVE")
+  );
+}
+function taskSafe_(t, m) {
+  var affiliate = m.affiliates[String(t.Affiliate_ID)] || {},
+    owner = m.staff[String(t.Staff_ID)] || {},
+    assignment = m.assignments[String(t.Assignment_ID)] || {},
+    brand = m.brands[String(assignment.Brand_ID || affiliate.Brand_ID)] || {},
+    due = String(t.Due_At || ""),
+    dueMs = due ? new Date(due).getTime() : NaN,
+    now = Date.now(),
+    today = new Date(now),
+    dueDate = isFinite(dueMs) ? new Date(dueMs) : null;
+  return {
+    taskId: String(t.Task_ID),
+    affiliateId: String(t.Affiliate_ID || ""),
+    assignmentId: String(t.Assignment_ID || ""),
+    staffId: String(t.Staff_ID),
+    ownerName: String(owner.Display_Name || owner.Username || ""),
+    ownerActive: owner.Status === "ACTIVE",
+    affiliateUsername: String(affiliate.Affiliate_Username || ""),
+    affiliateName: String(affiliate.Affiliate_Name || ""),
+    brandId: String(brand.Brand_ID || affiliate.Brand_ID || ""),
+    brandName: String(brand.Brand_Name || ""),
+    brandCode: String(brand.Brand_Code || ""),
+    taskType: String(t.Task_Type || ""),
+    title: String(t.Title || ""),
+    description: String(t.Description || ""),
+    priority: String(t.Priority || "NORMAL"),
+    status: String(t.Status || ""),
+    dueAt: due,
+    startedAt: String(t.Started_At || ""),
+    completedAt: String(t.Completed_At || ""),
+    completionNotes: String(t.Completion_Notes || ""),
+    createdAt: String(t.Created_At || ""),
+    updatedAt: String(t.Updated_At || ""),
+    overdue: Boolean(
+      TASK_OPEN_[String(t.Status)] && isFinite(dueMs) && dueMs < now,
+    ),
+    dueToday: Boolean(
+      TASK_OPEN_[String(t.Status)] &&
+        dueDate &&
+        dueDate.getFullYear() === today.getFullYear() &&
+        dueDate.getMonth() === today.getMonth() &&
+        dueDate.getDate() === today.getDate(),
+    ),
+  };
+}
+function tasks_(u, p) {
+  p = p || {};
+  var m = taskMaps_(),
+    admin = taskAdmin_(u),
+    candidates = rows_("Tasks").filter(function (t) {
+      return taskVisible_(u, t, m);
+    }),
+    rank = { HIGH: 0, NORMAL: 1, LOW: 2 },
+    now = Date.now(),
+    today = new Date(now),
+    summary = { open: 0, overdue: 0, dueToday: 0, high: 0, completed: 0 };
+  function state_(t) {
+    var status = String(t.Status),
+      due = taskTime_(t.Due_At),
+      date = isFinite(due) ? new Date(due) : null,
+      open = Boolean(TASK_OPEN_[status]);
+    return {
+      status: status,
+      open: open,
+      overdue: open && due < now,
+      dueToday: Boolean(
+        open &&
+          date &&
+          date.getFullYear() === today.getFullYear() &&
+          date.getMonth() === today.getMonth() &&
+          date.getDate() === today.getDate(),
+      ),
+      due: due,
+    };
+  }
+  candidates.forEach(function (t) {
+    var s = state_(t);
+    if (s.open) summary.open++;
+    if (s.overdue) summary.overdue++;
+    if (s.dueToday) summary.dueToday++;
+    if (s.open && String(t.Priority) === "HIGH") summary.high++;
+    if (s.status === "COMPLETED") summary.completed++;
+  });
+  var card = String(p.card || "open"),
+    query = String(p.search || "")
+      .trim()
+      .toLowerCase();
+  candidates = candidates.filter(function (t) {
+    var s = state_(t),
+      affiliate = m.affiliates[String(t.Affiliate_ID)] || {},
+      owner = m.staff[String(t.Staff_ID)] || {},
+      assignment = m.assignments[String(t.Assignment_ID)] || {},
+      brand = m.brands[String(assignment.Brand_ID || affiliate.Brand_ID)] || {};
+    if (
+      (card === "open" && !s.open) ||
+      (card === "overdue" && !s.overdue) ||
+      (card === "today" && !s.dueToday) ||
+      (card === "high" && !(s.open && String(t.Priority) === "HIGH")) ||
+      (card === "completed" && s.status !== "COMPLETED")
+    )
+      return false;
+    if (
+      (admin && p.staffId && String(t.Staff_ID) !== String(p.staffId)) ||
+      (p.brand &&
+        String(brand.Brand_ID || affiliate.Brand_ID) !== String(p.brand)) ||
+      (p.priority && String(t.Priority) !== String(p.priority)) ||
+      (p.status && s.status !== String(p.status))
+    )
+      return false;
+    if (
+      query &&
+      [
+        affiliate.Affiliate_Username,
+        affiliate.Affiliate_Name,
+        owner.Display_Name,
+        owner.Username,
+        t.Task_Type,
+        t.Title,
+        t.Description,
+        brand.Brand_Name,
+        brand.Brand_Code,
+      ].every(function (v) {
+        return (
+          String(v || "")
+            .toLowerCase()
+            .indexOf(query) < 0
+        );
+      })
+    )
+      return false;
+    return true;
+  });
+  candidates.sort(function (a, b) {
+    var as = state_(a),
+      bs = state_(b);
+    if (as.open !== bs.open) return as.open ? -1 : 1;
+    if (as.overdue !== bs.overdue) return as.overdue ? -1 : 1;
+    var ar =
+        rank[String(a.Priority)] === undefined ? 3 : rank[String(a.Priority)],
+      br =
+        rank[String(b.Priority)] === undefined ? 3 : rank[String(b.Priority)];
+    return (
+      ar - br ||
+      as.due - bs.due ||
+      String(a.Task_ID).localeCompare(String(b.Task_ID))
+    );
+  });
+  var size = Math.max(1, Math.min(Number(p.pageSize) || 50, 100)),
+    page = Math.max(1, Number(p.page) || 1),
+    start = (page - 1) * size,
+    response = {
+      items: candidates.slice(start, start + size).map(function (t) {
+        return taskSafe_(t, m);
+      }),
+      page: page,
+      pageSize: size,
+      total: candidates.length,
+      summary: summary,
+      canManage: admin,
+      options: { staff: [], brands: [], affiliates: [] },
+    };
+  response.options.brands = Object.keys(m.brands)
+    .map(function (id) {
+      return m.brands[id];
+    })
+    .map(function (b) {
+      return {
+        brandId: String(b.Brand_ID),
+        brandName: String(b.Brand_Name || b.Brand_Code || b.Brand_ID),
+      };
+    });
+  if (admin)
+    response.options.staff = Object.keys(m.staff)
+      .map(function (id) {
+        return m.staff[id];
+      })
+      .filter(function (s) {
+        return s.Role === "STAFF" && s.Status === "ACTIVE";
+      })
+      .map(function (s) {
+        return {
+          staffId: String(s.Staff_ID),
+          displayName: String(s.Display_Name || s.Username),
+          team: String(s.Team || ""),
+        };
+      });
+  return response;
+}
+function taskTime_(value) {
+  var n = value ? new Date(value).getTime() : NaN;
+  return isFinite(n) ? n : Infinity;
+}
+function taskText_(value, label, max) {
+  value = String(value || "").trim();
+  if (!value) throw apiError_("VALIDATION_FAILED", label + " is required.");
+  if (value.length > max)
+    throw apiError_("VALIDATION_FAILED", label + " is too long.");
+  return value;
+}
+function taskTarget_(staffId, m) {
+  var s = m.staff[String(staffId)];
+  if (!s || s.Role !== "STAFF" || s.Status !== "ACTIVE")
+    throw apiError_("VALIDATION_FAILED", "Select an active STAFF owner.");
+  return s;
+}
+function createTask_(u, p) {
+  requireRole_(u, ["ADMIN", "SUPER_ADMIN"]);
+  var lock = LockService.getScriptLock(),
+    row,
+    duplicate;
+  lock.waitLock(30000);
+  try {
+    clearCache_("Tasks");
+    var m = taskMaps_(),
+      owner = taskTarget_(p.staffId, m),
+      affiliateId = String(p.affiliateId || ""),
+      assignmentId = "";
+    if (affiliateId) {
+      var affiliate = m.affiliates[affiliateId],
+        assignment = m.activeByAffiliate[affiliateId];
+      if (!affiliate) throw apiError_("NOT_FOUND", "Affiliate not found.");
+      if (!assignment || String(assignment.Staff_ID) !== String(owner.Staff_ID))
+        throw apiError_(
+          "INVALID_STATE",
+          "The selected staff member does not own the affiliate active assignment.",
+        );
+      assignmentId = String(assignment.Assignment_ID);
+    }
+    var clientId = String(p.clientRequestId || "");
+    if (clientId)
+      duplicate = rows_("Tasks").filter(function (t) {
+        return (
+          String(t.Request_ID) === clientId &&
+          String(t.Created_By) === String(u.Staff_ID)
+        );
+      })[0];
+    if (duplicate) {
+      row = duplicate;
+    } else {
+      var t = now_();
+      row = {
+        Task_ID: nextIdUnlocked_("Task"),
+        Affiliate_ID: affiliateId,
+        Assignment_ID: assignmentId,
+        Staff_ID: owner.Staff_ID,
+        Task_Type: taskText_(p.taskType, "Task type", 80),
+        Title: taskText_(p.title, "Title", 160),
+        Description: String(p.description || "")
+          .trim()
+          .slice(0, 2000),
+        Priority:
+          ["HIGH", "NORMAL", "LOW"].indexOf(String(p.priority)) >= 0
+            ? String(p.priority)
+            : "NORMAL",
+        Status: "PENDING",
+        Due_At: String(p.dueAt || ""),
+        Started_At: "",
+        Completed_At: "",
+        Completion_Notes: "",
+        Created_By: u.Staff_ID,
+        Created_At: t,
+        Updated_By: u.Staff_ID,
+        Updated_At: t,
+        Request_ID: clientId,
+      };
+      appendRows_("Tasks", [row]);
+    }
+  } finally {
+    lock.releaseLock();
+  }
+  if (!duplicate)
+    audit_(
+      u,
+      "TASK_CREATED",
+      "Task",
+      row.Task_ID,
+      row.Affiliate_ID,
+      null,
+      {
+        taskId: row.Task_ID,
+        staffId: row.Staff_ID,
+        affiliateId: row.Affiliate_ID,
+        status: row.Status,
+      },
+      { requestId: p.requestId },
+    );
+  return taskSafe_(row, taskMaps_());
+}
+function taskForMutation_(u, id, m) {
+  var task = rows_("Tasks").filter(function (t) {
+    return String(t.Task_ID) === String(id);
+  })[0];
+  if (!task) throw apiError_("NOT_FOUND", "Task not found.");
+  if (!taskVisible_(u, task, m)) throw apiError_("FORBIDDEN", "Access denied.");
+  return task;
+}
+function startTask_(u, p) {
+  var lock = LockService.getScriptLock(),
+    task,
+    before;
+  lock.waitLock(30000);
+  try {
+    clearCache_("Tasks");
+    var m = taskMaps_();
+    task = taskForMutation_(u, p.taskId, m);
+    if (task.Status === "IN_PROGRESS") return taskSafe_(task, m);
+    if (task.Status !== "PENDING")
+      throw apiError_("INVALID_STATE", "Task cannot be started.");
+    var changes = {
+      Status: "IN_PROGRESS",
+      Started_At: now_(),
+      Updated_By: u.Staff_ID,
+      Updated_At: now_(),
+    };
+    before = updateById_("Tasks", "Task_ID", task.Task_ID, changes);
+    Object.keys(changes).forEach(function (k) {
+      task[k] = changes[k];
+    });
+  } finally {
+    lock.releaseLock();
+  }
+  audit_(
+    u,
+    "TASK_STARTED",
+    "Task",
+    task.Task_ID,
+    task.Affiliate_ID,
+    { status: before.Status },
+    { status: "IN_PROGRESS" },
+    { requestId: p.requestId },
+  );
+  return taskSafe_(task, taskMaps_());
+}
+function completeTask_(u, p) {
+  var lock = LockService.getScriptLock(),
+    task,
+    before;
+  lock.waitLock(30000);
+  try {
+    clearCache_("Tasks");
+    var m = taskMaps_();
+    task = taskForMutation_(u, p.taskId, m);
+    if (task.Status === "COMPLETED") return taskSafe_(task, m);
+    if (!TASK_OPEN_[String(task.Status)])
+      throw apiError_("INVALID_STATE", "Task cannot be completed.");
+    var t = now_(),
+      changes = {
+        Status: "COMPLETED",
+        Completed_At: t,
+        Completion_Notes: String(p.completionNotes || "")
+          .trim()
+          .slice(0, 2000),
+        Updated_By: u.Staff_ID,
+        Updated_At: t,
+      };
+    before = updateById_("Tasks", "Task_ID", task.Task_ID, changes);
+    Object.keys(changes).forEach(function (k) {
+      task[k] = changes[k];
+    });
+  } finally {
+    lock.releaseLock();
+  }
+  audit_(
+    u,
+    "TASK_COMPLETED",
+    "Task",
+    task.Task_ID,
+    task.Affiliate_ID,
+    { status: before.Status },
+    { status: "COMPLETED", completionNotes: task.Completion_Notes },
+    { requestId: p.requestId },
+  );
+  return taskSafe_(task, taskMaps_());
+}
+function reassignTask_(u, p) {
+  requireRole_(u, ["ADMIN", "SUPER_ADMIN"]);
+  var lock = LockService.getScriptLock(),
+    task,
+    before;
+  lock.waitLock(30000);
+  try {
+    clearCache_("Tasks");
+    var m = taskMaps_();
+    task = taskForMutation_(u, p.taskId, m);
+    if (!TASK_OPEN_[String(task.Status)])
+      throw apiError_("INVALID_STATE", "Only open tasks can be reassigned.");
+    var target = taskTarget_(p.staffId, m),
+      assignmentId = "";
+    if (task.Affiliate_ID) {
+      var active = m.activeByAffiliate[String(task.Affiliate_ID)];
+      if (!active || String(active.Staff_ID) !== String(target.Staff_ID))
+        throw apiError_(
+          "INVALID_STATE",
+          "The target staff member does not own the affiliate active assignment.",
+        );
+      assignmentId = String(active.Assignment_ID);
+    }
+    var changes = {
+      Staff_ID: target.Staff_ID,
+      Assignment_ID: assignmentId,
+      Updated_By: u.Staff_ID,
+      Updated_At: now_(),
+    };
+    before = updateById_("Tasks", "Task_ID", task.Task_ID, changes);
+    Object.keys(changes).forEach(function (k) {
+      task[k] = changes[k];
+    });
+  } finally {
+    lock.releaseLock();
+  }
+  audit_(
+    u,
+    "TASK_REASSIGNED",
+    "Task",
+    task.Task_ID,
+    task.Affiliate_ID,
+    { staffId: before.Staff_ID },
+    { staffId: task.Staff_ID },
+    { requestId: p.requestId },
+  );
+  return taskSafe_(task, taskMaps_());
+}
+function cancelTask_(u, p) {
+  requireRole_(u, ["ADMIN", "SUPER_ADMIN"]);
+  var lock = LockService.getScriptLock(),
+    task,
+    before;
+  lock.waitLock(30000);
+  try {
+    clearCache_("Tasks");
+    var m = taskMaps_();
+    task = taskForMutation_(u, p.taskId, m);
+    if (task.Status === "CANCELLED") return taskSafe_(task, m);
+    if (!TASK_OPEN_[String(task.Status)])
+      throw apiError_("INVALID_STATE", "Only open tasks can be cancelled.");
+    var t = now_(),
+      changes = {
+        Status: "CANCELLED",
+        Completed_At: t,
+        Completion_Notes: String(p.notes || "")
+          .trim()
+          .slice(0, 2000),
+        Updated_By: u.Staff_ID,
+        Updated_At: t,
+      };
+    before = updateById_("Tasks", "Task_ID", task.Task_ID, changes);
+    Object.keys(changes).forEach(function (k) {
+      task[k] = changes[k];
+    });
+  } finally {
+    lock.releaseLock();
+  }
+  audit_(
+    u,
+    "TASK_CANCELLED",
+    "Task",
+    task.Task_ID,
+    task.Affiliate_ID,
+    { status: before.Status },
+    { status: "CANCELLED" },
+    { requestId: p.requestId },
+  );
+  return taskSafe_(task, taskMaps_());
+}

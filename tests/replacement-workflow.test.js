@@ -1,28 +1,536 @@
-const assert=require('assert'),fs=require('fs'),vm=require('vm');
-function environment({pool=true}={}){const data={Affiliates:[{Affiliate_ID:'AFF1',Affiliate_Username:'old.user',Affiliate_Name:'Old User',Email:'old@example.com',Phone:'111',Brand_ID:'B1',Lifecycle_Status:'ASSIGNED',Prospect_Status:'NEW',Archive_Status:'ACTIVE'}],Assignments:[{Assignment_ID:'ASN1',Affiliate_ID:'AFF1',Staff_ID:'S1',Brand_ID:'B1',Assignment_Type:'PROSPECT',Status:'ACTIVE'}],Work_Items:[{Work_ID:'W1',Affiliate_ID:'AFF1',Assignment_ID:'ASN1',Staff_ID:'S1',Work_Type:'FIRST_CONTACT',Priority:'NORMAL',Status:'PENDING',Due_At:'2026-09-01T00:00:00.000Z'}],Contact_Attempts:[],Interactions:[],Followups:[{Followup_ID:'F1',Affiliate_ID:'AFF1',Assignment_ID:'ASN1',Staff_ID:'S1',Status:'PENDING'}],Affiliate_Pool:pool?[{Affiliate_Username:'first.new',Full_Name:'First New',Email:'first@example.com',Phone_Number:'222',Brand:'ALPHA'},{Affiliate_Username:'other.brand',Full_Name:'Other',Email:'other@example.com',Phone_Number:'333',Brand:'BETA'},{Affiliate_Username:'second.new',Full_Name:'Second New',Email:'second@example.com',Phone_Number:'444',Brand:'ALPHA'}]:[{Affiliate_Username:'other.brand',Brand:'BETA'}],Brand_List:[{Brand_ID:'B1',Brand_Name:'Alpha',Brand_Code:'ALPHA',Market:'LK',Default_Language:'EN'},{Brand_ID:'B2',Brand_Name:'Beta',Brand_Code:'BETA'}],Audit_Log:[]},counters={};
-  const context={console,Date,String,Number,Boolean,Array,Math,JSON,isFinite,Error,apiError_:(code,message)=>Object.assign(new Error(message),{code}),requireRole_:(u,roles)=>{if(!roles.includes(u.Role))throw context.apiError_('FORBIDDEN','Denied')},rows_:name=>data[name],clearCache_:()=>{},now_:()=>new Date().toISOString(),config_:key=>key==='ATTEMPT_TWO_WAIT_HOURS'?72:key==='ATTEMPT_THREE_WAIT_HOURS'?120:24,safeSheetText_:(v,max)=>{let s=String(v||'').trim().slice(0,max||1000);return/^[=+\-@]/.test(s)?"'"+s:s},LockService:{getScriptLock:()=>({waitLock:()=>{},releaseLock:()=>{}})},reserveIdsUnlocked_:(entity,count)=>Array.from({length:count},()=>{counters[entity]=(counters[entity]||0)+1;return ({Attempt:'ATM',Interaction:'INT',Followup:'FUP',Affiliate:'AFF',Assignment:'ASN',Work:'WRK'}[entity])+String(counters[entity]).padStart(6,'0')}),appendRows_:(name,rows)=>data[name].push(...rows.map(x=>({...x}))),updateById_:(name,column,id,changes)=>{const row=data[name].find(x=>String(x[column])===String(id));if(!row)return null;const before={...row};Object.assign(row,changes);return before},updateRowsWhere_:(name,predicate,changes)=>{const updated=[];data[name].forEach(row=>{if(predicate(row)){updated.push({...row});Object.assign(row,typeof changes==='function'?changes(row):changes)}});return updated},sheet_:name=>({deleteRow:row=>data[name].splice(row-2,1)}),audit_:(u,action,type,id,affiliateId,before,after)=>data.Audit_Log.push({action,type,id,affiliateId,before,after})};vm.createContext(context);vm.runInContext(fs.readFileSync('backend/Replacement.gs','utf8'),context);return{context,data}}
-const owner={Staff_ID:'S1',Username:'owner',Role:'STAFF'},other={Staff_ID:'S2',Username:'other',Role:'STAFF'};
-function oldAttempts(data,count,assignment='ASN1'){for(let i=0;i<count;i++)data.Contact_Attempts.push({Attempt_ID:`OLD${assignment}${i}`,Affiliate_ID:'AFF1',Assignment_ID:assignment,Staff_ID:'S1',Attempt_Number:i+1,Channel:'CALL',Attempt_At:new Date(Date.now()-(count-i)*121*3600000).toISOString(),Result:'NO_ANSWER',Notes:''})}
-{
-  const{context,data}=environment();data.Contact_Attempts.push({Attempt_ID:'PRIOR',Affiliate_ID:'AFF1',Assignment_ID:'ENDED',Staff_ID:'S1',Attempt_Number:9,Channel:'CALL',Attempt_At:'2020-01-01T00:00:00.000Z',Result:'NO_ANSWER'});let workspace=context.prospectWorkspace_(owner,{affiliateId:'AFF1'});assert.equal(workspace.replacementAttemptCount,0);const one=context.recordProspectAttempt_(owner,{affiliateId:'AFF1',channel:'CALL',outcome:'NO_ANSWER',staffId:'S2',assignmentId:'FAKE',attemptNumber:99});assert.equal(one.attemptCount,1);assert.equal(data.Contact_Attempts.at(-1).Staff_ID,'S1');assert.equal(data.Contact_Attempts.at(-1).Assignment_ID,'ASN1');assert.equal(data.Contact_Attempts.at(-1).Attempt_Number,1);assert.throws(()=>context.recordProspectAttempt_(owner,{affiliateId:'AFF1',channel:'EMAIL',outcome:'UNREACHABLE'}),e=>e.code==='INVALID_STATE');data.Contact_Attempts.at(-1).Attempt_At='2020-01-01T00:00:00.000Z';context.recordProspectAttempt_(owner,{affiliateId:'AFF1',channel:'EMAIL',outcome:'UNREACHABLE'});data.Contact_Attempts.at(-1).Attempt_At='2020-01-04T00:00:00.000Z';const third=context.recordProspectAttempt_(owner,{affiliateId:'AFF1',channel:'WHATSAPP',outcome:'WRONG_CONTACT',notes:'Number belongs to another person'});assert.equal(third.replacementEligible,true);assert.equal(data.Assignments[0].Status,'ACTIVE');assert.equal(data.Affiliate_Pool.length,3);assert.ok(data.Audit_Log.some(x=>x.action==='PROSPECT_REPLACEMENT_ELIGIBLE'));assert.throws(()=>context.prospectWorkspace_(other,{affiliateId:'AFF1'}),e=>e.code==='FORBIDDEN');
+const assert = require("assert"),
+  fs = require("fs"),
+  vm = require("vm");
+function environment({ pool = true } = {}) {
+  const data = {
+      Affiliates: [
+        {
+          Affiliate_ID: "AFF1",
+          Affiliate_Username: "old.user",
+          Affiliate_Name: "Old User",
+          Email: "old@example.com",
+          Phone: "111",
+          Brand_ID: "B1",
+          Lifecycle_Status: "ASSIGNED",
+          Prospect_Status: "NEW",
+          Archive_Status: "ACTIVE",
+        },
+      ],
+      Assignments: [
+        {
+          Assignment_ID: "ASN1",
+          Affiliate_ID: "AFF1",
+          Staff_ID: "S1",
+          Brand_ID: "B1",
+          Assignment_Type: "PROSPECT",
+          Status: "ACTIVE",
+        },
+      ],
+      Work_Items: [
+        {
+          Work_ID: "W1",
+          Affiliate_ID: "AFF1",
+          Assignment_ID: "ASN1",
+          Staff_ID: "S1",
+          Work_Type: "FIRST_CONTACT",
+          Priority: "NORMAL",
+          Status: "PENDING",
+          Due_At: "2026-09-01T00:00:00.000Z",
+        },
+      ],
+      Contact_Attempts: [],
+      Interactions: [],
+      Followups: [
+        {
+          Followup_ID: "F1",
+          Affiliate_ID: "AFF1",
+          Assignment_ID: "ASN1",
+          Staff_ID: "S1",
+          Status: "PENDING",
+        },
+      ],
+      Affiliate_Pool: pool
+        ? [
+            {
+              Affiliate_Username: "first.new",
+              Full_Name: "First New",
+              Email: "first@example.com",
+              Phone_Number: "222",
+              Brand: "ALPHA",
+            },
+            {
+              Affiliate_Username: "other.brand",
+              Full_Name: "Other",
+              Email: "other@example.com",
+              Phone_Number: "333",
+              Brand: "BETA",
+            },
+            {
+              Affiliate_Username: "second.new",
+              Full_Name: "Second New",
+              Email: "second@example.com",
+              Phone_Number: "444",
+              Brand: "ALPHA",
+            },
+          ]
+        : [{ Affiliate_Username: "other.brand", Brand: "BETA" }],
+      Brand_List: [
+        {
+          Brand_ID: "B1",
+          Brand_Name: "Alpha",
+          Brand_Code: "ALPHA",
+          Market: "LK",
+          Default_Language: "EN",
+        },
+        { Brand_ID: "B2", Brand_Name: "Beta", Brand_Code: "BETA" },
+      ],
+      Audit_Log: [],
+    },
+    counters = {};
+  const context = {
+    console,
+    Date,
+    String,
+    Number,
+    Boolean,
+    Array,
+    Math,
+    JSON,
+    isFinite,
+    Error,
+    apiError_: (code, message) => Object.assign(new Error(message), { code }),
+    requireRole_: (u, roles) => {
+      if (!roles.includes(u.Role))
+        throw context.apiError_("FORBIDDEN", "Denied");
+    },
+    rows_: (name) => data[name],
+    clearCache_: () => {},
+    now_: () => new Date().toISOString(),
+    config_: (key) =>
+      key === "ATTEMPT_TWO_WAIT_HOURS"
+        ? 72
+        : key === "ATTEMPT_THREE_WAIT_HOURS"
+          ? 120
+          : 24,
+    safeSheetText_: (v, max) => {
+      let s = String(v || "")
+        .trim()
+        .slice(0, max || 1000);
+      return /^[=+\-@]/.test(s) ? "'" + s : s;
+    },
+    LockService: {
+      getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }),
+    },
+    reserveIdsUnlocked_: (entity, count) =>
+      Array.from({ length: count }, () => {
+        counters[entity] = (counters[entity] || 0) + 1;
+        return (
+          {
+            Attempt: "ATM",
+            Interaction: "INT",
+            Followup: "FUP",
+            Affiliate: "AFF",
+            Assignment: "ASN",
+            Work: "WRK",
+          }[entity] + String(counters[entity]).padStart(6, "0")
+        );
+      }),
+    appendRows_: (name, rows) =>
+      data[name].push(...rows.map((x) => ({ ...x }))),
+    updateById_: (name, column, id, changes) => {
+      const row = data[name].find((x) => String(x[column]) === String(id));
+      if (!row) return null;
+      const before = { ...row };
+      Object.assign(row, changes);
+      return before;
+    },
+    updateRowsWhere_: (name, predicate, changes) => {
+      const updated = [];
+      data[name].forEach((row) => {
+        if (predicate(row)) {
+          updated.push({ ...row });
+          Object.assign(
+            row,
+            typeof changes === "function" ? changes(row) : changes,
+          );
+        }
+      });
+      return updated;
+    },
+    sheet_: (name) => ({ deleteRow: (row) => data[name].splice(row - 2, 1) }),
+    audit_: (u, action, type, id, affiliateId, before, after) =>
+      data.Audit_Log.push({ action, type, id, affiliateId, before, after }),
+  };
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync("backend/Replacement.gs", "utf8"), context);
+  return { context, data };
+}
+const owner = { Staff_ID: "S1", Username: "owner", Role: "STAFF" },
+  other = { Staff_ID: "S2", Username: "other", Role: "STAFF" };
+function oldAttempts(data, count, assignment = "ASN1") {
+  for (let i = 0; i < count; i++)
+    data.Contact_Attempts.push({
+      Attempt_ID: `OLD${assignment}${i}`,
+      Affiliate_ID: "AFF1",
+      Assignment_ID: assignment,
+      Staff_ID: "S1",
+      Attempt_Number: i + 1,
+      Channel: "CALL",
+      Attempt_At: new Date(
+        Date.now() - (count - i) * 121 * 3600000,
+      ).toISOString(),
+      Result: "NO_ANSWER",
+      Notes: "",
+    });
 }
 {
-  const{context,data}=environment();oldAttempts(data,3);const r=context.requestProspectReplacement_(owner,{affiliateId:'AFF1'});assert.equal(r.status,'REPLACED');assert.equal(r.replacementUsername,'first.new');assert.equal(data.Affiliate_Pool.length,2);assert.equal(data.Affiliate_Pool[0].Affiliate_Username,'other.brand');assert.equal(data.Assignments[0].Status,'ENDED');assert.equal(data.Assignments[0].End_Reason,'CONTACT_ATTEMPTS_EXHAUSTED');assert.equal(data.Assignments[1].Previous_Assignment_ID,'ASN1');assert.equal(data.Assignments[1].Staff_ID,'S1');assert.equal(data.Work_Items[0].Status,'CANCELLED');assert.equal(data.Work_Items[1].Work_Type,'FIRST_CONTACT');assert.equal(data.Followups[0].Status,'COMPLETED');assert.equal(data.Contact_Attempts.length,3);const again=context.requestProspectReplacement_(owner,{affiliateId:'AFF1'});assert.equal(again.replacementAffiliateId,r.replacementAffiliateId);assert.equal(data.Assignments.length,2);assert.equal(data.Affiliate_Pool.length,2);assert.ok(data.Audit_Log.some(x=>x.action==='PROSPECT_REPLACED'));
+  const { context, data } = environment();
+  data.Contact_Attempts.push({
+    Attempt_ID: "PRIOR",
+    Affiliate_ID: "AFF1",
+    Assignment_ID: "ENDED",
+    Staff_ID: "S1",
+    Attempt_Number: 9,
+    Channel: "CALL",
+    Attempt_At: "2020-01-01T00:00:00.000Z",
+    Result: "NO_ANSWER",
+  });
+  let workspace = context.prospectWorkspace_(owner, { affiliateId: "AFF1" });
+  assert.equal(workspace.replacementAttemptCount, 0);
+  const one = context.recordProspectAttempt_(owner, {
+    affiliateId: "AFF1",
+    channel: "CALL",
+    outcome: "NO_ANSWER",
+    staffId: "S2",
+    assignmentId: "FAKE",
+    attemptNumber: 99,
+  });
+  assert.equal(one.attemptCount, 1);
+  assert.equal(data.Contact_Attempts.at(-1).Staff_ID, "S1");
+  assert.equal(data.Contact_Attempts.at(-1).Assignment_ID, "ASN1");
+  assert.equal(data.Contact_Attempts.at(-1).Attempt_Number, 1);
+  assert.throws(
+    () =>
+      context.recordProspectAttempt_(owner, {
+        affiliateId: "AFF1",
+        channel: "EMAIL",
+        outcome: "UNREACHABLE",
+      }),
+    (e) => e.code === "INVALID_STATE",
+  );
+  data.Contact_Attempts.at(-1).Attempt_At = "2020-01-01T00:00:00.000Z";
+  context.recordProspectAttempt_(owner, {
+    affiliateId: "AFF1",
+    channel: "EMAIL",
+    outcome: "UNREACHABLE",
+  });
+  data.Contact_Attempts.at(-1).Attempt_At = "2020-01-04T00:00:00.000Z";
+  const third = context.recordProspectAttempt_(owner, {
+    affiliateId: "AFF1",
+    channel: "WHATSAPP",
+    outcome: "WRONG_CONTACT",
+    notes: "Number belongs to another person",
+  });
+  assert.equal(third.replacementEligible, true);
+  assert.equal(data.Assignments[0].Status, "ACTIVE");
+  assert.equal(data.Affiliate_Pool.length, 3);
+  assert.ok(
+    data.Audit_Log.some((x) => x.action === "PROSPECT_REPLACEMENT_ELIGIBLE"),
+  );
+  assert.throws(
+    () => context.prospectWorkspace_(other, { affiliateId: "AFF1" }),
+    (e) => e.code === "FORBIDDEN",
+  );
 }
 {
-  const{context,data}=environment();assert.throws(()=>context.recordProspectAttempt_(owner,{affiliateId:'AFF1',channel:'CALL',outcome:'BAD_AFFILIATE'}),e=>e.code==='VALIDATION_FAILED');const r=context.recordProspectAttempt_(owner,{affiliateId:'AFF1',channel:'CALL',outcome:'BAD_AFFILIATE',notes:'Confirmed fraudulent details'});assert.equal(r.replacement.status,'REPLACED');assert.equal(data.Contact_Attempts.length,1);assert.equal(data.Assignments[0].End_Reason,'BAD_AFFILIATE');assert.ok(data.Audit_Log.some(x=>x.action==='BAD_AFFILIATE_MARKED'));
+  const { context, data } = environment();
+  oldAttempts(data, 3);
+  const r = context.requestProspectReplacement_(owner, { affiliateId: "AFF1" });
+  assert.equal(r.status, "REPLACED");
+  assert.equal(r.replacementUsername, "first.new");
+  assert.equal(data.Affiliate_Pool.length, 2);
+  assert.equal(data.Affiliate_Pool[0].Affiliate_Username, "other.brand");
+  assert.equal(data.Assignments[0].Status, "ENDED");
+  assert.equal(data.Assignments[0].End_Reason, "CONTACT_ATTEMPTS_EXHAUSTED");
+  assert.equal(data.Assignments[1].Previous_Assignment_ID, "ASN1");
+  assert.equal(data.Assignments[1].Staff_ID, "S1");
+  assert.equal(data.Work_Items[0].Status, "CANCELLED");
+  assert.equal(data.Work_Items[1].Work_Type, "FIRST_CONTACT");
+  assert.equal(data.Followups[0].Status, "COMPLETED");
+  assert.equal(data.Contact_Attempts.length, 3);
+  const again = context.requestProspectReplacement_(owner, {
+    affiliateId: "AFF1",
+  });
+  assert.equal(again.replacementAffiliateId, r.replacementAffiliateId);
+  assert.equal(data.Assignments.length, 2);
+  assert.equal(data.Affiliate_Pool.length, 2);
+  assert.ok(data.Audit_Log.some((x) => x.action === "PROSPECT_REPLACED"));
 }
 {
-  const{context,data}=environment({pool:false});oldAttempts(data,3);const r=context.requestProspectReplacement_(owner,{affiliateId:'AFF1'});assert.equal(r.status,'PENDING');assert.match(r.message,/no eligible affiliates/i);assert.equal(data.Affiliate_Pool[0].Brand,'BETA');assert.equal(data.Affiliates[0].Prospect_Status,'REPLACEMENT_PENDING');assert.equal(data.Assignments[0].Status,'ENDED');assert.equal(data.Assignments.length,1);const again=context.requestProspectReplacement_(owner,{affiliateId:'AFF1'});assert.equal(again.status,'PENDING');assert.equal(data.Assignments.length,1);data.Affiliate_Pool.push({Affiliate_Username:'later.new',Full_Name:'Later New',Email:'later@example.com',Phone_Number:'555',Brand:'ALPHA'});const allocated=context.requestProspectReplacement_(owner,{affiliateId:'AFF1'});assert.equal(allocated.status,'REPLACED');assert.equal(allocated.replacementUsername,'later.new');assert.equal(data.Assignments.length,2);assert.ok(data.Audit_Log.some(x=>x.action==='PROSPECT_REPLACEMENT_PENDING'));
+  const { context, data } = environment();
+  assert.throws(
+    () =>
+      context.recordProspectAttempt_(owner, {
+        affiliateId: "AFF1",
+        channel: "CALL",
+        outcome: "BAD_AFFILIATE",
+      }),
+    (e) => e.code === "VALIDATION_FAILED",
+  );
+  const r = context.recordProspectAttempt_(owner, {
+    affiliateId: "AFF1",
+    channel: "CALL",
+    outcome: "BAD_AFFILIATE",
+    notes: "Confirmed fraudulent details",
+  });
+  assert.equal(r.replacement.status, "REPLACED");
+  assert.equal(data.Contact_Attempts.length, 1);
+  assert.equal(data.Assignments[0].End_Reason, "BAD_AFFILIATE");
+  assert.ok(data.Audit_Log.some((x) => x.action === "BAD_AFFILIATE_MARKED"));
 }
 {
-  const{context,data}=environment();const r=context.recordProspectAttempt_(owner,{affiliateId:'AFF1',channel:'TELEGRAM',outcome:'CONNECTED',notes:'Connected successfully'});assert.equal(r.replacement,null);assert.equal(data.Assignments[0].Status,'ACTIVE');assert.equal(data.Affiliates[0].Lifecycle_Status,'CONNECTED');assert.equal(data.Work_Items[0].Status,'COMPLETED');assert.equal(data.Work_Items[1].Work_Type,'TELEGRAM_ONBOARDING');assert.equal(data.Interactions.length,1);data.Assignments[0].Status='ENDED';assert.throws(()=>context.prospectWorkspace_(owner,{affiliateId:'AFF1'}),e=>e.code==='FORBIDDEN');
+  const { context, data } = environment({ pool: false });
+  oldAttempts(data, 3);
+  const r = context.requestProspectReplacement_(owner, { affiliateId: "AFF1" });
+  assert.equal(r.status, "PENDING");
+  assert.match(r.message, /no eligible affiliates/i);
+  assert.equal(data.Affiliate_Pool[0].Brand, "BETA");
+  assert.equal(data.Affiliates[0].Prospect_Status, "REPLACEMENT_PENDING");
+  assert.equal(data.Assignments[0].Status, "ENDED");
+  assert.equal(data.Assignments.length, 1);
+  const again = context.requestProspectReplacement_(owner, {
+    affiliateId: "AFF1",
+  });
+  assert.equal(again.status, "PENDING");
+  assert.equal(data.Assignments.length, 1);
+  data.Affiliate_Pool.push({
+    Affiliate_Username: "later.new",
+    Full_Name: "Later New",
+    Email: "later@example.com",
+    Phone_Number: "555",
+    Brand: "ALPHA",
+  });
+  const allocated = context.requestProspectReplacement_(owner, {
+    affiliateId: "AFF1",
+  });
+  assert.equal(allocated.status, "REPLACED");
+  assert.equal(allocated.replacementUsername, "later.new");
+  assert.equal(data.Assignments.length, 2);
+  assert.ok(
+    data.Audit_Log.some((x) => x.action === "PROSPECT_REPLACEMENT_PENDING"),
+  );
 }
-{const{context,data}=environment();const first=context.recordProspectAttempt_(owner,{affiliateId:'AFF1',channel:'CALL',outcome:'NO_ANSWER',notes:'Production test - first contact attempt, no answer.'});assert.equal(first.replacementAttemptCount,1);assert.equal(first.replacementEligible,false);assert.equal(first.replacement,null);assert.equal(data.Contact_Attempts.length,1);let workspace=context.prospectWorkspace_(owner,{affiliateId:'AFF1'});assert.equal(workspace.replacementAttemptCount,1);assert.equal(workspace.attempts.length,1);assert.equal(workspace.attempts[0].outcome,'NO_ANSWER');assert.throws(()=>context.recordProspectAttempt_(owner,{affiliateId:'AFF1',channel:'CALL',outcome:'UNREACHABLE'}),e=>e.code==='INVALID_STATE');workspace=context.prospectWorkspace_(owner,{affiliateId:'AFF1'});assert.equal(data.Contact_Attempts.length,1);assert.equal(workspace.replacementAttemptCount,1);assert.equal(workspace.replacementEligible,false)}
-{const{context,data}=environment();context.recordProspectAttempt_(owner,{affiliateId:'AFF1',channel:'CALL',outcome:'NO_ANSWER'});data.Contact_Attempts[0].Attempt_At=new Date(Date.now()-72*3600000-1000).toISOString();const second=context.recordProspectAttempt_(owner,{affiliateId:'AFF1',channel:'EMAIL',outcome:'UNREACHABLE'});assert.equal(second.replacementAttemptCount,2);assert.equal(second.replacementEligible,false);assert.throws(()=>context.recordProspectAttempt_(owner,{affiliateId:'AFF1',channel:'CALL',outcome:'WRONG_CONTACT',notes:'Wrong number'}),e=>e.code==='INVALID_STATE');data.Contact_Attempts[0].Attempt_At=new Date(Date.now()-200*3600000).toISOString();data.Contact_Attempts[1].Attempt_At=new Date(Date.now()-120*3600000-1000).toISOString();const third=context.recordProspectAttempt_(owner,{affiliateId:'AFF1',channel:'CALL',outcome:'WRONG_CONTACT',notes:'Wrong number'});assert.equal(third.replacementAttemptCount,3);assert.equal(third.replacementEligible,true)}
-for(const prior of [1,2]){const{context,data}=environment();oldAttempts(data,prior);const r=context.recordProspectAttempt_(owner,{affiliateId:'AFF1',channel:'CALL',outcome:'BAD_AFFILIATE',notes:'Confirmed invalid affiliate'});assert.equal(r.replacement.status,'REPLACED');assert.equal(data.Assignments[0].End_Reason,'BAD_AFFILIATE')}
-for(const outcome of ['CONNECTED','NO_ANSWER','UNREACHABLE','WRONG_CONTACT','CALLBACK_REQUESTED','BAD_AFFILIATE','OTHER']){const{context,data}=environment(),payload={affiliateId:'AFF1',channel:'CALL',outcome,notes:['WRONG_CONTACT','BAD_AFFILIATE','OTHER'].includes(outcome)?'Required explanatory note':'Outcome contract test'};if(outcome==='CALLBACK_REQUESTED')payload.nextContactAt=new Date(Date.now()+86400000).toISOString();context.recordProspectAttempt_(owner,payload);assert.equal(data.Contact_Attempts.length,1,`${outcome} must create exactly one attempt`);assert.equal(data.Contact_Attempts[0].Result,outcome)}
-for(const channel of ['CALL','WHATSAPP','TELEGRAM','EMAIL','OTHER']){const{context,data}=environment();context.recordProspectAttempt_(owner,{affiliateId:'AFF1',channel,outcome:'NO_ANSWER'});assert.equal(data.Contact_Attempts.length,1);assert.equal(data.Contact_Attempts[0].Channel,channel)}
-for(const outcome of ['', 'NO ANSWER','ARBITRARY']){const{context,data}=environment();assert.throws(()=>context.recordProspectAttempt_(owner,{affiliateId:'AFF1',channel:'CALL',outcome}),e=>e.code==='VALIDATION_FAILED');assert.equal(data.Contact_Attempts.length,0)}
-{const{context,data}=environment();assert.throws(()=>context.recordProspectAttempt_(owner,{affiliateId:'AFF1',channel:'SMS',outcome:'NO_ANSWER'}),e=>e.code==='VALIDATION_FAILED');assert.equal(data.Contact_Attempts.length,0)}
-const api=fs.readFileSync('backend/Api.gs','utf8'),backend=fs.readFileSync('backend/Replacement.gs','utf8'),page=fs.readFileSync('app/affiliates/contact-attempt/page.tsx','utf8'),affiliatePage=fs.readFileSync('app/affiliates/page.tsx','utf8'),workspaceCss=fs.readFileSync('app/affiliates/workspace.module.css','utf8');assert.match(api,/sessionUser_\(request\.token\).*getProspectContactWorkspace/s);assert.match(page,/staffId:'IGNORED'.*assignmentId:'IGNORED'.*attemptNumber:999/);assert.match(page,/OUTCOMES\.map\(x=><option value=\{x\.value\} key=\{x\.value\}>\{x\.label\}<\/option>\)/);assert.match(page,/CHANNELS\.map\(x=><option value=\{x\.value\} key=\{x\.value\}>\{x\.label\}<\/option>\)/);for(const value of ['CONNECTED','NO_ANSWER','UNREACHABLE','WRONG_CONTACT','CALLBACK_REQUESTED','BAD_AFFILIATE','OTHER']){assert.match(page,new RegExp(`value:'${value}'`));assert.match(backend,new RegExp(`['\"]${value}['\"]`))}assert.match(affiliatePage,/className=\{styles\.contactPrimary\}[^>]+>Record Contact Attempt<\/Link>/);assert.match(affiliatePage,/className=\{styles\.contactSecondary\}[^>]+>Report Issue<\/Link>/);assert.match(workspaceCss,/\.contactPrimary:hover/);assert.match(workspaceCss,/\.contactPrimary:focus-visible/);assert.ok(!backend.match(/Password_Hash|Session_Token_Hash/));console.log('replacement workflow tests passed');
+{
+  const { context, data } = environment();
+  const r = context.recordProspectAttempt_(owner, {
+    affiliateId: "AFF1",
+    channel: "TELEGRAM",
+    outcome: "CONNECTED",
+    notes: "Connected successfully",
+  });
+  assert.equal(r.replacement, null);
+  assert.equal(data.Assignments[0].Status, "ACTIVE");
+  assert.equal(data.Affiliates[0].Lifecycle_Status, "CONNECTED");
+  assert.equal(data.Work_Items[0].Status, "COMPLETED");
+  assert.equal(data.Work_Items[1].Work_Type, "TELEGRAM_ONBOARDING");
+  assert.equal(data.Interactions.length, 1);
+  data.Assignments[0].Status = "ENDED";
+  assert.throws(
+    () => context.prospectWorkspace_(owner, { affiliateId: "AFF1" }),
+    (e) => e.code === "FORBIDDEN",
+  );
+}
+{
+  const { context, data } = environment();
+  const first = context.recordProspectAttempt_(owner, {
+    affiliateId: "AFF1",
+    channel: "CALL",
+    outcome: "NO_ANSWER",
+    notes: "Production test - first contact attempt, no answer.",
+  });
+  assert.equal(first.replacementAttemptCount, 1);
+  assert.equal(first.replacementEligible, false);
+  assert.equal(first.replacement, null);
+  assert.equal(data.Contact_Attempts.length, 1);
+  let workspace = context.prospectWorkspace_(owner, { affiliateId: "AFF1" });
+  assert.equal(workspace.replacementAttemptCount, 1);
+  assert.equal(workspace.attempts.length, 1);
+  assert.equal(workspace.attempts[0].outcome, "NO_ANSWER");
+  assert.throws(
+    () =>
+      context.recordProspectAttempt_(owner, {
+        affiliateId: "AFF1",
+        channel: "CALL",
+        outcome: "UNREACHABLE",
+      }),
+    (e) => e.code === "INVALID_STATE",
+  );
+  workspace = context.prospectWorkspace_(owner, { affiliateId: "AFF1" });
+  assert.equal(data.Contact_Attempts.length, 1);
+  assert.equal(workspace.replacementAttemptCount, 1);
+  assert.equal(workspace.replacementEligible, false);
+}
+{
+  const { context, data } = environment();
+  context.recordProspectAttempt_(owner, {
+    affiliateId: "AFF1",
+    channel: "CALL",
+    outcome: "NO_ANSWER",
+  });
+  data.Contact_Attempts[0].Attempt_At = new Date(
+    Date.now() - 72 * 3600000 - 1000,
+  ).toISOString();
+  const second = context.recordProspectAttempt_(owner, {
+    affiliateId: "AFF1",
+    channel: "EMAIL",
+    outcome: "UNREACHABLE",
+  });
+  assert.equal(second.replacementAttemptCount, 2);
+  assert.equal(second.replacementEligible, false);
+  assert.throws(
+    () =>
+      context.recordProspectAttempt_(owner, {
+        affiliateId: "AFF1",
+        channel: "CALL",
+        outcome: "WRONG_CONTACT",
+        notes: "Wrong number",
+      }),
+    (e) => e.code === "INVALID_STATE",
+  );
+  data.Contact_Attempts[0].Attempt_At = new Date(
+    Date.now() - 200 * 3600000,
+  ).toISOString();
+  data.Contact_Attempts[1].Attempt_At = new Date(
+    Date.now() - 120 * 3600000 - 1000,
+  ).toISOString();
+  const third = context.recordProspectAttempt_(owner, {
+    affiliateId: "AFF1",
+    channel: "CALL",
+    outcome: "WRONG_CONTACT",
+    notes: "Wrong number",
+  });
+  assert.equal(third.replacementAttemptCount, 3);
+  assert.equal(third.replacementEligible, true);
+}
+for (const prior of [1, 2]) {
+  const { context, data } = environment();
+  oldAttempts(data, prior);
+  const r = context.recordProspectAttempt_(owner, {
+    affiliateId: "AFF1",
+    channel: "CALL",
+    outcome: "BAD_AFFILIATE",
+    notes: "Confirmed invalid affiliate",
+  });
+  assert.equal(r.replacement.status, "REPLACED");
+  assert.equal(data.Assignments[0].End_Reason, "BAD_AFFILIATE");
+}
+for (const outcome of [
+  "CONNECTED",
+  "NO_ANSWER",
+  "UNREACHABLE",
+  "WRONG_CONTACT",
+  "CALLBACK_REQUESTED",
+  "BAD_AFFILIATE",
+  "OTHER",
+]) {
+  const { context, data } = environment(),
+    payload = {
+      affiliateId: "AFF1",
+      channel: "CALL",
+      outcome,
+      notes: ["WRONG_CONTACT", "BAD_AFFILIATE", "OTHER"].includes(outcome)
+        ? "Required explanatory note"
+        : "Outcome contract test",
+    };
+  if (outcome === "CALLBACK_REQUESTED")
+    payload.nextContactAt = new Date(Date.now() + 86400000).toISOString();
+  context.recordProspectAttempt_(owner, payload);
+  assert.equal(
+    data.Contact_Attempts.length,
+    1,
+    `${outcome} must create exactly one attempt`,
+  );
+  assert.equal(data.Contact_Attempts[0].Result, outcome);
+}
+for (const channel of ["CALL", "WHATSAPP", "TELEGRAM", "EMAIL", "OTHER"]) {
+  const { context, data } = environment();
+  context.recordProspectAttempt_(owner, {
+    affiliateId: "AFF1",
+    channel,
+    outcome: "NO_ANSWER",
+  });
+  assert.equal(data.Contact_Attempts.length, 1);
+  assert.equal(data.Contact_Attempts[0].Channel, channel);
+}
+for (const outcome of ["", "NO ANSWER", "ARBITRARY"]) {
+  const { context, data } = environment();
+  assert.throws(
+    () =>
+      context.recordProspectAttempt_(owner, {
+        affiliateId: "AFF1",
+        channel: "CALL",
+        outcome,
+      }),
+    (e) => e.code === "VALIDATION_FAILED",
+  );
+  assert.equal(data.Contact_Attempts.length, 0);
+}
+{
+  const { context, data } = environment();
+  assert.throws(
+    () =>
+      context.recordProspectAttempt_(owner, {
+        affiliateId: "AFF1",
+        channel: "SMS",
+        outcome: "NO_ANSWER",
+      }),
+    (e) => e.code === "VALIDATION_FAILED",
+  );
+  assert.equal(data.Contact_Attempts.length, 0);
+}
+const api = fs.readFileSync("backend/Api.gs", "utf8"),
+  backend = fs.readFileSync("backend/Replacement.gs", "utf8"),
+  page = fs.readFileSync("app/affiliates/contact-attempt/page.tsx", "utf8"),
+  affiliatePage = fs.readFileSync("app/affiliates/page.tsx", "utf8"),
+  affiliateCompact = affiliatePage.replace(/\s/g, ""),
+  workspaceCss = fs.readFileSync("app/affiliates/workspace.module.css", "utf8");
+assert.match(
+  api,
+  /sessionUser_\(request\.token\).*getProspectContactWorkspace/s,
+);
+assert.match(
+  page,
+  /staffId:'IGNORED'.*assignmentId:'IGNORED'.*attemptNumber:999/,
+);
+assert.match(
+  page,
+  /OUTCOMES\.map\(x=><option value=\{x\.value\} key=\{x\.value\}>\{x\.label\}<\/option>\)/,
+);
+assert.match(
+  page,
+  /CHANNELS\.map\(x=><option value=\{x\.value\} key=\{x\.value\}>\{x\.label\}<\/option>\)/,
+);
+for (const value of [
+  "CONNECTED",
+  "NO_ANSWER",
+  "UNREACHABLE",
+  "WRONG_CONTACT",
+  "CALLBACK_REQUESTED",
+  "BAD_AFFILIATE",
+  "OTHER",
+]) {
+  assert.match(page, new RegExp(`value:'${value}'`));
+  assert.match(backend, new RegExp(`['\"]${value}['\"]`));
+}
+assert.match(
+  affiliateCompact,
+  /className=\{styles\.contactPrimary\}[^>]+>RecordContactAttempt<\/Link>/,
+);
+assert.match(
+  affiliateCompact,
+  /className=\{styles\.contactSecondary\}[^>]+>ReportIssue<\/Link>/,
+);
+assert.match(workspaceCss, /\.contactPrimary:hover/);
+assert.match(workspaceCss, /\.contactPrimary:focus-visible/);
+assert.ok(!backend.match(/Password_Hash|Session_Token_Hash/));
+console.log("replacement workflow tests passed");

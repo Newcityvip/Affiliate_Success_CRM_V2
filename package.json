@@ -29,7 +29,8 @@
     "test:team-operations": "node tests/team-operations.test.js",
     "test:affiliate-navigation": "node tests/affiliate-navigation-auth.test.js",
     "test:scale-reads": "node tests/scale-reads.test.js",
-    "test:production-polish": "node tests/production-polish.test.js"
+    "test:production-polish": "node tests/production-polish.test.js",
+    "test:production-readiness-v2": "node tests/production-readiness-v2.test.js"
   },
   "dependencies": {
     "next": "^16.3.3",
