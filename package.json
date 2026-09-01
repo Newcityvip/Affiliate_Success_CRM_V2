@@ -27,7 +27,8 @@
     "test:reports": "node tests/reports.test.js",
     "test:production-reads": "node tests/production-read-regression.test.js",
     "test:team-operations": "node tests/team-operations.test.js",
-    "test:affiliate-navigation": "node tests/affiliate-navigation-auth.test.js"
+    "test:affiliate-navigation": "node tests/affiliate-navigation-auth.test.js",
+    "test:scale-reads": "node tests/scale-reads.test.js"
   },
   "dependencies": {
     "next": "^16.3.3",
