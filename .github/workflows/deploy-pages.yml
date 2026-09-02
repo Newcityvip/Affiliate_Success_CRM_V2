@@ -22,6 +22,7 @@ jobs:
       - run: npm ci
       - run: npm run build
         env:
+          NEXT_PUBLIC_BASE_PATH: /Affiliate_Success_CRM_V2
           NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
