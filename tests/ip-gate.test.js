@@ -28,13 +28,17 @@ async function invoke(ip, allowedIps = ALLOWED, includeEnv = true) {
   return { response, continued };
 }
 
-async function assertDenied(result) {
+async function assertDenied(result, displayedIp) {
   assert.equal(result.continued, false);
   assert.equal(result.response.status, 403);
-  assert.equal(await result.response.text(), 'Access Denied');
-  assert.equal(result.response.headers.get('Content-Type'), 'text/plain; charset=UTF-8');
+  const html = await result.response.text();
+  assert.match(html, /Access Restricted/);
+  assert.match(html, new RegExp(displayedIp || 'Unavailable'));
+  assert.ok(!html.includes('ALLOWED_IPS'));
+  assert.equal(result.response.headers.get('Content-Type'), 'text/html; charset=UTF-8');
   assert.equal(result.response.headers.get('Cache-Control'), 'no-store');
   assert.equal(result.response.headers.get('X-Robots-Tag'), 'noindex, nofollow');
+  return html;
 }
 
 (async () => {
@@ -44,10 +48,11 @@ async function assertDenied(result) {
     assert.equal(allowed.response.status, 200);
   }
 
-  await assertDenied(await invoke('198.51.100.10'));
+  const blockedHtml = await assertDenied(await invoke('198.51.100.10'), '198.51.100.10');
+  for (const allowedIp of ALLOWED.split(',')) assert.ok(!blockedHtml.includes(allowedIp));
   await assertDenied(await invoke(undefined));
-  await assertDenied(await invoke('139.59.5.188', undefined, false));
-  await assertDenied(await invoke('139.59.5.188', ''));
+  await assertDenied(await invoke('139.59.5.188', undefined, false), '139.59.5.188');
+  await assertDenied(await invoke('139.59.5.188', ''), '139.59.5.188');
 
   const whitespace = await invoke(
     '123.231.65.210',
@@ -55,8 +60,14 @@ async function assertDenied(result) {
   );
   assert.equal(whitespace.continued, true);
 
-  await assertDenied(await invoke('139.59.5.18'));
-  await assertDenied(await invoke('139.59.5.1880'));
+  await assertDenied(await invoke('139.59.5.18'), '139.59.5.18');
+  await assertDenied(await invoke('139.59.5.1880'), '139.59.5.1880');
+
+  const injection = '<script>alert("blocked")</script>&';
+  const escapedHtml = await assertDenied(await invoke(injection), '&lt;script&gt;');
+  assert.ok(!escapedHtml.includes(injection));
+  assert.ok(!escapedHtml.includes('<script>alert'));
+  assert.match(escapedHtml, /&lt;script&gt;alert\(&quot;blocked&quot;\)&lt;\/script&gt;&amp;/);
 
   console.log('Cloudflare Pages IP gate allowlist and fail-closed scenarios passed');
 })().catch((error) => {
