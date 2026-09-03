@@ -301,6 +301,107 @@ function oldAttempts(data, count, assignment = "ASN1") {
 }
 {
   const { context, data } = environment();
+  const affiliateAttempt = context.recordProspectAttempt_(owner, {
+    affiliateId: "AFF1",
+    channel: "CALL",
+    outcome: "NO_ANSWER",
+  });
+  assert.equal(data.Contact_Attempts.length, 1);
+  assert.equal(data.Contact_Attempts[0].Work_ID, "");
+  assert.equal(data.Contact_Attempts[0].Assignment_ID, "ASN1");
+  assert.equal(data.Contact_Attempts[0].Staff_ID, "S1");
+  assert.equal(data.Work_Items[0].Status, "PENDING");
+  assert.equal(affiliateAttempt.replacementAttemptCount, 1);
+  const myWorkAttempt = context.submitFirstContactOutcome_(owner, {
+    workId: "W1",
+    outcome: "NO_ANSWER",
+  });
+  assert.equal(data.Contact_Attempts.length, 2);
+  assert.equal(data.Contact_Attempts[1].Work_ID, "W1");
+  assert.equal(data.Contact_Attempts[1].Attempt_Number, 2);
+  assert.equal(data.Work_Items[0].Status, "COMPLETED");
+  assert.ok(myWorkAttempt.nextWorkId);
+  assert.equal(context.prospectWorkspace_(owner, { affiliateId: "AFF1" }).replacementAttemptCount, 1);
+}
+{
+  const { context, data } = environment();
+  const first = context.submitFirstContactOutcome_(owner, { workId: "W1", outcome: "NO_ANSWER" });
+  data.Contact_Attempts[0].Attempt_At = new Date(Date.now() - 73 * 3600000).toISOString();
+  context.recordProspectAttempt_(owner, { affiliateId: "AFF1", channel: "CALL", outcome: "NO_ANSWER" });
+  assert.equal(data.Contact_Attempts[1].Work_ID, "");
+  assert.equal(context.prospectWorkspace_(owner, { affiliateId: "AFF1" }).replacementAttemptCount, 2);
+  data.Contact_Attempts[1].Attempt_At = new Date(Date.now() - 121 * 3600000).toISOString();
+  data.Contact_Attempts[0].Attempt_At = new Date(Date.now() - 300 * 3600000).toISOString();
+  context.submitFirstContactOutcome_(owner, {
+    workId: first.nextWorkId,
+    outcome: "WRONG_OR_INVALID_CONTACT",
+    notes: "Still the wrong contact",
+  });
+  assert.equal(data.Contact_Attempts.length, 3);
+  assert.equal(data.Contact_Attempts[2].Work_ID, first.nextWorkId);
+  assert.equal(context.prospectWorkspace_(owner, { affiliateId: "AFF1" }).replacementAttemptCount, 3);
+}
+{
+  const { context, data } = environment();
+  context.recordProspectAttempt_(owner, { affiliateId: "AFF1", channel: "CALL", outcome: "WRONG_CONTACT", notes: "Wrong contact" });
+  data.Contact_Attempts[0].Attempt_At = new Date(Date.now() - 300 * 3600000).toISOString();
+  const second = context.submitFirstContactOutcome_(owner, { workId: "W1", outcome: "NO_ANSWER" });
+  assert.equal(context.prospectWorkspace_(owner, { affiliateId: "AFF1" }).replacementAttemptCount, 2);
+  data.Contact_Attempts[1].Attempt_At = new Date(Date.now() - 121 * 3600000).toISOString();
+  context.recordProspectAttempt_(owner, { affiliateId: "AFF1", channel: "CALL", outcome: "UNREACHABLE" });
+  assert.equal(data.Contact_Attempts.length, 3);
+  assert.equal(data.Contact_Attempts[0].Work_ID, "");
+  assert.equal(data.Contact_Attempts[1].Work_ID, "W1");
+  assert.equal(data.Contact_Attempts[2].Work_ID, "");
+  assert.equal(data.Work_Items.find((x) => x.Work_ID === second.nextWorkId).Status, "PENDING");
+  assert.equal(context.prospectWorkspace_(owner, { affiliateId: "AFF1" }).replacementAttemptCount, 3);
+}
+{
+  const { context, data } = environment();
+  const first = context.submitFirstContactOutcome_(owner, { workId: "W1", outcome: "NO_ANSWER" });
+  data.Contact_Attempts[0].Attempt_At = new Date(Date.now() - 73 * 3600000).toISOString();
+  context.recordProspectAttempt_(owner, { affiliateId: "AFF1", channel: "CALL", outcome: "UNREACHABLE" });
+  assert.equal(context.prospectWorkspace_(owner, { affiliateId: "AFF1" }).replacementAttemptCount, 2);
+  context.submitFirstContactOutcome_(owner, { workId: first.nextWorkId, outcome: "NO_ANSWER" });
+  assert.equal(data.Contact_Attempts.length, 3);
+  assert.equal(context.prospectWorkspace_(owner, { affiliateId: "AFF1" }).replacementAttemptCount, 2);
+}
+for (const outcome of ["NO_ANSWER", "UNREACHABLE", "WRONG_CONTACT", "OTHER"]) {
+  const { context, data } = environment();
+  context.recordProspectAttempt_(owner, {
+    affiliateId: "AFF1",
+    channel: "CALL",
+    outcome,
+    notes: ["WRONG_CONTACT", "OTHER"].includes(outcome) ? "Required note" : "",
+  });
+  assert.equal(data.Contact_Attempts[0].Work_ID, "", `${outcome} must not claim active work`);
+  assert.equal(data.Work_Items[0].Status, "PENDING");
+}
+{
+  const { context, data } = environment();
+  const callbackAt = new Date(Date.now() + 86400000).toISOString();
+  context.recordProspectAttempt_(owner, { affiliateId: "AFF1", channel: "CALL", outcome: "CALLBACK_REQUESTED", nextContactAt: callbackAt });
+  assert.equal(data.Contact_Attempts[0].Work_ID, "W1");
+  assert.equal(data.Followups.at(-1).Source_Work_ID, "W1");
+  assert.equal(data.Work_Items[0].Status, "PENDING");
+}
+{
+  const { context, data } = environment();
+  context.recordProspectAttempt_(owner, { affiliateId: "AFF1", channel: "CALL", outcome: "CONNECTED", telegramStatus: "TELEGRAM_CONNECTED" });
+  assert.equal(data.Contact_Attempts[0].Work_ID, "W1");
+  assert.equal(data.Work_Items[0].Status, "COMPLETED");
+}
+{
+  const { context, data } = environment();
+  data.Contact_Attempts.push({ Attempt_ID: "PARTIAL", Affiliate_ID: "AFF1", Assignment_ID: "ASN1", Work_ID: "W1", Staff_ID: "S1", Attempt_Number: 1, Result: "NO_ANSWER", Attempt_At: new Date().toISOString() });
+  assert.throws(
+    () => context.submitFirstContactOutcome_(owner, { workId: "W1", outcome: "NO_ANSWER" }),
+    (e) => e.code === "INVALID_STATE",
+  );
+  assert.equal(data.Contact_Attempts.length, 1);
+}
+{
+  const { context, data } = environment();
   oldAttempts(data, 3);
   const r = context.requestProspectReplacement_(owner, { affiliateId: "AFF1" });
   assert.equal(r.status, "REPLACED");
@@ -342,6 +443,7 @@ function oldAttempts(data, count, assignment = "ASN1") {
   });
   assert.equal(r.replacement.status, "REPLACED");
   assert.equal(data.Contact_Attempts.length, 1);
+  assert.equal(data.Contact_Attempts[0].Work_ID, "W1");
   assert.equal(data.Assignments[0].End_Reason, "BAD_AFFILIATE");
   assert.ok(data.Audit_Log.some((x) => x.action === "BAD_AFFILIATE_MARKED"));
 }
