@@ -11,6 +11,8 @@ function environment({ pool = true } = {}) {
           Email: "old@example.com",
           Phone: "111",
           Brand_ID: "B1",
+          Telegram_Username: "",
+          Telegram_Status: "NOT_CONNECTED",
           Lifecycle_Status: "ASSIGNED",
           Prospect_Status: "NEW",
           Archive_Status: "ACTIVE",
@@ -327,6 +329,7 @@ function oldAttempts(data, count, assignment = "ASN1") {
     affiliateId: "AFF1",
     channel: "TELEGRAM",
     outcome: "CONNECTED",
+    telegramStatus: "TELEGRAM_NOT_CONNECTED",
     notes: "Connected successfully",
   });
   assert.equal(r.replacement, null);
@@ -340,6 +343,84 @@ function oldAttempts(data, count, assignment = "ASN1") {
     () => context.prospectWorkspace_(owner, { affiliateId: "AFF1" }),
     (e) => e.code === "FORBIDDEN",
   );
+}
+{
+  const { context, data } = environment();
+  const workspace = context.prospectWorkspace_(owner, { affiliateId: "AFF1" });
+  assert.equal(workspace.affiliate.telegramStatus, "NOT_CONNECTED");
+  assert.equal(workspace.affiliate.telegramUsername, "");
+  const r = context.recordProspectAttempt_(owner, {
+    affiliateId: "AFF1",
+    channel: "CALL",
+    outcome: "CONNECTED",
+    telegramStatus: "TELEGRAM_CONNECTED",
+    telegramUsername: "  @connected_user  ",
+    staffId: "S2",
+    assignmentId: "FAKE",
+  });
+  assert.equal(r.replacement, null);
+  assert.equal(data.Contact_Attempts.length, 1);
+  assert.equal(data.Contact_Attempts[0].Result_Detail, "TELEGRAM_CONNECTED");
+  assert.equal(data.Contact_Attempts[0].Attempt_Number, 1);
+  assert.equal(data.Contact_Attempts[0].Staff_ID, "S1");
+  assert.equal(data.Contact_Attempts[0].Assignment_ID, "ASN1");
+  assert.equal(data.Affiliates[0].Telegram_Status, "CONNECTED");
+  assert.equal(data.Affiliates[0].Telegram_Username, "'@connected_user");
+  assert.equal(data.Affiliates[0].Lifecycle_Status, "TELEGRAM_CONNECTED");
+  assert.ok(data.Affiliates[0].Telegram_Connected_At);
+  assert.equal(data.Work_Items.length, 1);
+  assert.equal(data.Work_Items[0].Status, "COMPLETED");
+  assert.equal(data.Interactions.length, 1);
+}
+{
+  const { context, data } = environment();
+  context.recordProspectAttempt_(owner, {
+    affiliateId: "AFF1",
+    channel: "CALL",
+    outcome: "CONNECTED",
+    telegramStatus: "TELEGRAM_NOT_CONNECTED",
+    telegramUsername: "@must_not_be_saved",
+  });
+  assert.equal(data.Affiliates[0].Telegram_Status, "NOT_CONNECTED");
+  assert.equal(data.Affiliates[0].Telegram_Username, "'@must_not_be_saved");
+  assert.equal(data.Affiliates[0].Lifecycle_Status, "CONNECTED");
+  assert.equal(data.Affiliates[0].Telegram_Connected_At, undefined);
+  assert.equal(data.Work_Items.filter((x) => x.Work_Type === "TELEGRAM_ONBOARDING").length, 1);
+}
+{
+  const { context, data } = environment();
+  assert.throws(
+    () => context.recordProspectAttempt_(owner, { affiliateId: "AFF1", channel: "CALL", outcome: "CONNECTED" }),
+    (e) => e.code === "VALIDATION_FAILED",
+  );
+  assert.equal(data.Contact_Attempts.length, 0);
+  context.recordProspectAttempt_(owner, {
+    affiliateId: "AFF1",
+    channel: "CALL",
+    outcome: "CONNECTED",
+    telegramStatus: "TELEGRAM_CONNECTED",
+    telegramUsername: "",
+  });
+  assert.equal(data.Affiliates[0].Telegram_Status, "CONNECTED");
+  assert.equal(data.Affiliates[0].Telegram_Username, "");
+}
+{
+  const { context, data } = environment();
+  data.Work_Items.push({
+    ...data.Work_Items[0],
+    Work_ID: "TG1",
+    Work_Type: "TELEGRAM_ONBOARDING",
+    Work_Channel: "TELEGRAM",
+    Due_At: "2026-09-02T00:00:00.000Z",
+  });
+  context.recordProspectAttempt_(owner, {
+    affiliateId: "AFF1",
+    channel: "CALL",
+    outcome: "CONNECTED",
+    telegramStatus: "TELEGRAM_NOT_CONNECTED",
+  });
+  assert.equal(data.Work_Items.filter((x) => x.Work_Type === "TELEGRAM_ONBOARDING").length, 1);
+  assert.equal(data.Work_Items.find((x) => x.Work_ID === "TG1").Status, "PENDING");
 }
 {
   const { context, data } = environment();
@@ -443,6 +524,7 @@ for (const outcome of [
         ? "Required explanatory note"
         : "Outcome contract test",
     };
+  if (outcome === "CONNECTED") payload.telegramStatus = "TELEGRAM_NOT_CONNECTED";
   if (outcome === "CALLBACK_REQUESTED")
     payload.nextContactAt = new Date(Date.now() + 86400000).toISOString();
   context.recordProspectAttempt_(owner, payload);
@@ -594,6 +676,12 @@ assert.match(
   page,
   /staffId:'IGNORED'.*assignmentId:'IGNORED'.*attemptNumber:999/,
 );
+assert.match(page, /Telegram connection status/);
+assert.match(page, /value="TELEGRAM_NOT_CONNECTED">Not connected yet/);
+assert.match(page, /value="TELEGRAM_CONNECTED">Connected/);
+assert.match(page, /Telegram username/);
+assert.match(page, /telegramStatus:outcome==='CONNECTED'\?telegramStatus:''/);
+assert.match(page, /telegramUsername:outcome==='CONNECTED'&&telegramStatus==='TELEGRAM_CONNECTED'\?telegramUsername:''/);
 assert.match(
   page,
   /OUTCOMES\.map\(x=><option value=\{x\.value\} key=\{x\.value\}>\{x\.label\}<\/option>\)/,
