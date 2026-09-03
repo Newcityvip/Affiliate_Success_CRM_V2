@@ -162,6 +162,7 @@ function environment({ pool = true } = {}) {
       data.Audit_Log.push({ action, type, id, affiliateId, before, after }),
   };
   vm.createContext(context);
+  vm.runInContext(fs.readFileSync("backend/Workflow.gs", "utf8"), context);
   vm.runInContext(fs.readFileSync("backend/Replacement.gs", "utf8"), context);
   return { context, data };
 }
@@ -477,6 +478,96 @@ for (const outcome of ["", "NO ANSWER", "ARBITRARY"]) {
 }
 {
   const { context, data } = environment();
+  data.Work_Items.push(
+    { ...data.Work_Items[0], Work_ID: "W_EARLIER", Due_At: "2020-01-01T00:00:00.000Z" },
+    { ...data.Work_Items[0], Work_ID: "W_COMPLETED", Status: "COMPLETED" },
+  );
+  const result = context.markBadAffiliateFromWork_(owner, {
+    workId: "W1",
+    affiliateId: "AFF1",
+    staffId: "S2",
+    assignmentId: "FAKE",
+    notes: "Confirmed invalid affiliate",
+    requestId: "BAD-WORK-1",
+  });
+  assert.equal(result.duplicate, false);
+  assert.equal(result.replacement.status, "REPLACED");
+  assert.equal(data.Contact_Attempts.length, 1);
+  assert.equal(data.Contact_Attempts[0].Work_ID, "W1");
+  assert.equal(data.Contact_Attempts[0].Affiliate_ID, "AFF1");
+  assert.equal(data.Contact_Attempts[0].Assignment_ID, "ASN1");
+  assert.equal(data.Contact_Attempts[0].Staff_ID, "S1");
+  assert.equal(data.Contact_Attempts[0].Result, "BAD_AFFILIATE");
+  assert.equal(data.Interactions.length, 0);
+  assert.equal(data.Assignments[0].Status, "ENDED");
+  assert.equal(data.Assignments[0].End_Reason, "BAD_AFFILIATE");
+  assert.equal(data.Work_Items.find((x) => x.Work_ID === "W1").Status, "CANCELLED");
+  assert.equal(data.Work_Items.find((x) => x.Work_ID === "W_EARLIER").Status, "CANCELLED");
+  assert.equal(data.Work_Items.find((x) => x.Work_ID === "W_COMPLETED").Status, "COMPLETED");
+  assert.equal(data.Followups[0].Status, "COMPLETED");
+  assert.equal(data.Followups[0].Outcome, "REPLACEMENT_REQUESTED");
+  assert.equal(data.Assignments[1].Staff_ID, "S1");
+  assert.equal(data.Work_Items.filter((x) => x.Assignment_ID === data.Assignments[1].Assignment_ID && x.Work_Type === "FIRST_CONTACT").length, 1);
+  assert.deepEqual(data.Audit_Log.map((x) => x.action), ["CONTACT_ATTEMPT_RECORDED", "BAD_AFFILIATE_MARKED", "PROSPECT_REPLACED"]);
+  const counts = { attempts: data.Contact_Attempts.length, audits: data.Audit_Log.length, assignments: data.Assignments.length, work: data.Work_Items.length, pool: data.Affiliate_Pool.length };
+  const replay = context.markBadAffiliateFromWork_(owner, { workId: "W1", affiliateId: "AFF1", notes: "Confirmed invalid affiliate" });
+  assert.equal(replay.duplicate, true);
+  assert.equal(replay.attemptId, result.attemptId);
+  assert.deepEqual({ attempts: data.Contact_Attempts.length, audits: data.Audit_Log.length, assignments: data.Assignments.length, work: data.Work_Items.length, pool: data.Affiliate_Pool.length }, counts);
+}
+{
+  const { context, data } = environment({ pool: false });
+  const result = context.markBadAffiliateFromWork_(owner, { workId: "W1", notes: "No valid account" });
+  assert.equal(result.replacement.status, "PENDING");
+  assert.equal(data.Assignments[0].Status, "ENDED");
+  assert.equal(data.Work_Items[0].Status, "CANCELLED");
+  assert.ok(data.Audit_Log.some((x) => x.action === "PROSPECT_REPLACEMENT_PENDING"));
+  const replay = context.markBadAffiliateFromWork_(owner, { workId: "W1", notes: "No valid account" });
+  assert.equal(replay.duplicate, true);
+  assert.equal(replay.replacement.status, "PENDING");
+  assert.equal(data.Contact_Attempts.length, 1);
+}
+{
+  const { context, data } = environment();
+  context.markBadAffiliateFromWork_(owner, { workId: "W1", notes: '=IMPORTXML("bad")' });
+  assert.ok(data.Contact_Attempts[0].Notes.startsWith("'="));
+}
+for (const setup of [
+  (data) => { data.Work_Items[0].Status = "COMPLETED"; },
+  (data) => { data.Work_Items[0].Status = "CANCELLED"; },
+  (data) => { data.Assignments[0].Status = "ENDED"; },
+  (data) => { data.Assignments[0].Staff_ID = "S2"; },
+  (data) => { data.Work_Items[0].Assignment_ID = "MISMATCH"; },
+]) {
+  const { context, data } = environment();
+  setup(data);
+  assert.throws(() => context.markBadAffiliateFromWork_(owner, { workId: "W1", affiliateId: "AFF1", notes: "Invalid" }), (e) => e.code === "INVALID_STATE");
+  assert.equal(data.Contact_Attempts.length, 0);
+}
+{
+  const { context, data } = environment();
+  assert.throws(() => context.markBadAffiliateFromWork_(owner, { workId: "", notes: "Invalid" }), (e) => e.code === "VALIDATION_FAILED");
+  assert.throws(() => context.markBadAffiliateFromWork_(owner, { workId: "MISSING", notes: "Invalid" }), (e) => e.code === "NOT_FOUND");
+  assert.throws(() => context.markBadAffiliateFromWork_(owner, { workId: "W1", affiliateId: "OTHER", notes: "Invalid" }), (e) => e.code === "VALIDATION_FAILED");
+  assert.throws(() => context.markBadAffiliateFromWork_(owner, { workId: "W1", notes: "" }), (e) => e.code === "VALIDATION_FAILED");
+  assert.throws(() => context.markBadAffiliateFromWork_(other, { workId: "W1", notes: "Invalid", staffId: "S1" }), (e) => e.code === "FORBIDDEN");
+  assert.throws(() => context.markBadAffiliateFromWork_({ Staff_ID: "ADMIN", Role: "ADMIN" }, { workId: "W1", notes: "Invalid" }), (e) => e.code === "FORBIDDEN");
+  assert.equal(data.Contact_Attempts.length, 0);
+}
+{
+  const { context, data } = environment();
+  context.submitFirstContactOutcome_(owner, { workId: "W1", outcome: "NO_ANSWER" });
+  assert.throws(() => context.markBadAffiliateFromWork_(owner, { workId: "W1", notes: "Invalid" }), (e) => e.code === "INVALID_STATE");
+  assert.equal(data.Contact_Attempts.length, 1);
+}
+{
+  const { context, data } = environment();
+  context.markBadAffiliateFromWork_(owner, { workId: "W1", notes: "Invalid" });
+  assert.throws(() => context.submitFirstContactOutcome_(owner, { workId: "W1", outcome: "NO_ANSWER" }), (e) => e.code === "INVALID_STATE");
+  assert.equal(data.Contact_Attempts.length, 1);
+}
+{
+  const { context, data } = environment();
   assert.throws(
     () =>
       context.recordProspectAttempt_(owner, {
@@ -490,6 +581,7 @@ for (const outcome of ["", "NO ANSWER", "ARBITRARY"]) {
 }
 const api = fs.readFileSync("backend/Api.gs", "utf8"),
   backend = fs.readFileSync("backend/Replacement.gs", "utf8"),
+  client = fs.readFileSync("lib/api-client.ts", "utf8"),
   page = fs.readFileSync("app/affiliates/contact-attempt/page.tsx", "utf8"),
   affiliatePage = fs.readFileSync("app/affiliates/page.tsx", "utf8"),
   affiliateCompact = affiliatePage.replace(/\s/g, ""),
@@ -532,5 +624,13 @@ assert.match(
 );
 assert.match(workspaceCss, /\.contactPrimary:hover/);
 assert.match(workspaceCss, /\.contactPrimary:focus-visible/);
+assert.match(api, /markBadAffiliateFromWork:function\(\)\{return markBadAffiliateFromWork_\(u,p\)\}/);
+assert.match(client, /markBadAffiliateFromWork\(payload:[^]*this\.call<ProspectAttemptResult>\('markBadAffiliateFromWork',payload\)/);
+assert.match(affiliatePage, /Mark as Bad Affiliate/);
+assert.match(affiliatePage, /Confirm Bad Affiliate/);
+assert.match(affiliatePage, /workId,\s*affiliateId: workspace\.work\.affiliateId/);
+assert.match(affiliatePage, /submitFirstContactOutcome\(payload\)/);
+assert.ok(!affiliatePage.includes('window.confirm'));
+assert.match(workspaceCss, /\.badAffiliate/);
 assert.ok(!backend.match(/Password_Hash|Session_Token_Hash/));
 console.log("replacement workflow tests passed");

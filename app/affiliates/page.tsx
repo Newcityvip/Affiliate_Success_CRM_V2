@@ -10,6 +10,7 @@ import {
   AffiliateDirectoryResponse,
   ApiError,
   FirstContactResult,
+  ProspectAttemptResult,
   WorkWorkspace,
 } from "../../lib/api-client";
 import { EMAIL_TOOL_URL } from "../../lib/external-tools";
@@ -54,6 +55,9 @@ function WorkWorkspaceView({ workId }: { workId: string }) {
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [success, setSuccess] = useState<FirstContactResult | null>(null),
+    [badResult, setBadResult] = useState<ProspectAttemptResult | null>(null),
+    [showBadAffiliate, setShowBadAffiliate] = useState(false),
+    [badAffiliateNotes, setBadAffiliateNotes] = useState(""),
     [outcome, setOutcome] = useState("CONNECTED"),
     [telegramStatus, setTelegramStatus] = useState("TELEGRAM_NOT_CONNECTED");
   const load = useCallback(async () => {
@@ -115,6 +119,27 @@ function WorkWorkspaceView({ workId }: { workId: string }) {
       setBusy(false);
     }
   }
+  async function markBadAffiliate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy || !workspace || !badAffiliateNotes.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api.markBadAffiliateFromWork({
+        workId,
+        affiliateId: workspace.work.affiliateId,
+        notes: badAffiliateNotes,
+        staffId: "IGNORED",
+        assignmentId: "IGNORED",
+      });
+      setBadResult(result);
+      setWorkspace(null);
+    } catch (cause) {
+      setError(message_(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
   if (loading)
     return (
       <WorkspaceState
@@ -149,6 +174,18 @@ function WorkWorkspaceView({ workId }: { workId: string }) {
         }
       />
     );
+  if (badResult) {
+    const replacement = badResult.replacement;
+    return (
+      <WorkspaceState
+        title="Bad Affiliate processed"
+        detail={replacement?.status === "REPLACED"
+          ? `The assignment was ended and replacement ${replacement.replacementUsername || replacement.replacementAffiliateId} was allocated.`
+          : "The assignment was ended and its active work was cancelled. Replacement remains pending because no eligible same-brand affiliate is currently available."}
+        action={<Link className="primary" href="/my-work">Return to My Work</Link>}
+      />
+    );
+  }
   if (!workspace) return null;
   const active = ["PENDING", "IN_PROGRESS", "OVERDUE"].includes(
       workspace.work.status,
@@ -316,6 +353,36 @@ function WorkWorkspaceView({ workId }: { workId: string }) {
           </div>
         )}
       </section>
+      {active && (
+        <section className={`card ${styles.badAffiliate}`}>
+          <div>
+            <span className={styles.eyebrow}>Assignment exception</span>
+            <h2>Bad Affiliate</h2>
+            <p className="muted">Use only when this affiliate is confirmed invalid.</p>
+          </div>
+          {!showBadAffiliate ? (
+            <button className={styles.badTrigger} type="button" disabled={busy} onClick={() => setShowBadAffiliate(true)}>
+              Mark as Bad Affiliate
+            </button>
+          ) : (
+            <form className={styles.badConfirm} onSubmit={markBadAffiliate}>
+              <p>This action will end the current assignment, cancel its active work, and immediately attempt a same-brand replacement. If none is available, replacement will remain pending.</p>
+              <dl>
+                <Detail label="Affiliate" value={workspace.affiliate.affiliateUsername} />
+                <Detail label="Work ID" value={workspace.work.workId} />
+              </dl>
+              <label>
+                Reason
+                <textarea required maxLength={1000} value={badAffiliateNotes} onChange={(event) => setBadAffiliateNotes(event.target.value)} placeholder="Explain why this affiliate is invalid" />
+              </label>
+              <div className={styles.badActions}>
+                <button type="button" disabled={busy} onClick={() => { setShowBadAffiliate(false); setBadAffiliateNotes(""); }}>Cancel</button>
+                <button className={styles.badConfirmButton} disabled={busy || !badAffiliateNotes.trim()}>{busy ? "Processing…" : "Confirm Bad Affiliate"}</button>
+              </div>
+            </form>
+          )}
+        </section>
+      )}
       {detail && <Activity events={detail.recentActivity} />}
     </>
   );
