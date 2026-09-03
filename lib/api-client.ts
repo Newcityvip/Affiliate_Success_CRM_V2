@@ -57,11 +57,12 @@ type ApiEnvelope<T> = { ok: boolean; data?: T; error?: { code: string; message: 
 export class ApiClient {
   private baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? '';
   private timeoutMs = 30_000;
+  private readTimeoutMs = 45_000;
   private token() { return typeof window === 'undefined' ? null : localStorage.getItem('crm_session_token'); }
-  async call<T>(action: string, payload: Record<string, unknown> = {}): Promise<T> {
+  async call<T>(action: string, payload: Record<string, unknown> = {}, timeoutMs = this.timeoutMs): Promise<T> {
     if (!this.baseUrl) throw new ApiError('API URL is not configured.', 'NOT_CONFIGURED');
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), this.timeoutMs);
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(this.baseUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, token: this.token(), payload }), signal: controller.signal });
       if(response.status>=500)throw new ApiError('The service is temporarily unavailable. Please try again.','TEMPORARY_UNAVAILABLE');
@@ -75,7 +76,7 @@ export class ApiClient {
       throw cause;
     } finally { window.clearTimeout(timeout); }
   }
-  async read<T>(action:string,payload:Record<string,unknown>={}){try{return await this.call<T>(action,payload)}catch(cause){if(!(cause instanceof ApiError)||!['REQUEST_TIMEOUT','NETWORK_ERROR','TEMPORARY_UNAVAILABLE'].includes(cause.code))throw cause;await new Promise(resolve=>window.setTimeout(resolve,250+Math.floor(Math.random()*201)));return this.call<T>(action,payload)}}
+  async read<T>(action:string,payload:Record<string,unknown>={}){try{return await this.call<T>(action,payload,this.readTimeoutMs)}catch(cause){if(!(cause instanceof ApiError)||!['NETWORK_ERROR','TEMPORARY_UNAVAILABLE'].includes(cause.code))throw cause;await new Promise(resolve=>window.setTimeout(resolve,250+Math.floor(Math.random()*201)));return this.call<T>(action,payload,this.readTimeoutMs)}}
   login(username: string, password: string) { return this.call<LoginResponse>('login', { username, password, userAgent: typeof navigator === 'undefined' ? '' : navigator.userAgent }); }
   logout() { return this.call<void>('logout'); }
   validateSession() { return this.read<{ valid: boolean }>('validateSession'); }

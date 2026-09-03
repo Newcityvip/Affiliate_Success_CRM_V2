@@ -247,6 +247,60 @@ function oldAttempts(data, count, assignment = "ASN1") {
 }
 {
   const { context, data } = environment();
+  const first = context.submitFirstContactOutcome_(owner, {
+    workId: "W1",
+    outcome: "NO_ANSWER",
+    notes: "My Work first qualifying failure",
+  });
+  assert.equal(data.Contact_Attempts.length, 1);
+  assert.equal(data.Contact_Attempts[0].Work_ID, "W1");
+  assert.equal(data.Contact_Attempts[0].Staff_ID, "S1");
+  assert.equal(context.prospectWorkspace_(owner, { affiliateId: "AFF1" }).replacementAttemptCount, 1);
+  assert.throws(
+    () => context.submitFirstContactOutcome_(owner, { workId: "W1", outcome: "NO_ANSWER" }),
+    (e) => e.code === "INVALID_STATE",
+  );
+  assert.equal(data.Contact_Attempts.length, 1);
+  data.Contact_Attempts[0].Attempt_At = new Date(Date.now() - 200 * 3600000).toISOString();
+  const second = context.recordProspectAttempt_(owner, {
+    affiliateId: "AFF1",
+    channel: "CALL",
+    outcome: "UNREACHABLE",
+  });
+  assert.equal(second.replacementAttemptCount, 2);
+  assert.throws(
+    () => context.recordProspectAttempt_(owner, { affiliateId: "AFF1", channel: "CALL", outcome: "WRONG_CONTACT", notes: "Still invalid" }),
+    (e) => e.code === "INVALID_STATE",
+  );
+  assert.equal(data.Contact_Attempts.length, 2);
+  data.Contact_Attempts[1].Attempt_At = new Date(Date.now() - 121 * 3600000).toISOString();
+  const third = context.recordProspectAttempt_(owner, {
+    affiliateId: "AFF1",
+    channel: "CALL",
+    outcome: "WRONG_CONTACT",
+    notes: "Confirmed wrong contact",
+  });
+  assert.equal(third.replacementAttemptCount, 3);
+  assert.equal(third.replacementEligible, true);
+  assert.deepEqual(data.Contact_Attempts.map((x) => x.Attempt_Number), [1, 2, 3]);
+  assert.equal(context.prospectWorkspace_(owner, { affiliateId: "AFF1" }).attempts.length, 3);
+  assert.equal(first.nextWorkId, data.Work_Items[1].Work_ID);
+}
+{
+  const { context, data } = environment();
+  const first = context.submitFirstContactOutcome_(owner, { workId: "W1", outcome: "NO_ANSWER" });
+  data.Contact_Attempts[0].Attempt_At = new Date(Date.now() - 73 * 3600000).toISOString();
+  context.submitFirstContactOutcome_(owner, {
+    workId: first.nextWorkId,
+    outcome: "WRONG_OR_INVALID_CONTACT",
+    notes: "My Work invalid contact",
+  });
+  assert.equal(data.Contact_Attempts.length, 2);
+  assert.equal(data.Contact_Attempts[1].Result, "WRONG_OR_INVALID_CONTACT");
+  assert.equal(context.prospectWorkspace_(owner, { affiliateId: "AFF1" }).replacementAttemptCount, 2);
+}
+{
+  const { context, data } = environment();
   oldAttempts(data, 3);
   const r = context.requestProspectReplacement_(owner, { affiliateId: "AFF1" });
   assert.equal(r.status, "REPLACED");

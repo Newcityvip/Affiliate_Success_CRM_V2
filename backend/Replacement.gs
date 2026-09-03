@@ -1,6 +1,6 @@
 var PROSPECT_CHANNELS_=['CALL','WHATSAPP','TELEGRAM','EMAIL','OTHER'];
 var PROSPECT_OUTCOMES_=['CONNECTED','NO_ANSWER','UNREACHABLE','WRONG_CONTACT','CALLBACK_REQUESTED','BAD_AFFILIATE','OTHER'];
-var REPLACEMENT_FAILURES_={NO_ANSWER:true,UNREACHABLE:true,WRONG_CONTACT:true};
+var REPLACEMENT_FAILURES_={NO_ANSWER:true,UNREACHABLE:true,WRONG_CONTACT:true,WRONG_OR_INVALID_CONTACT:true};
 var REPLACEMENT_ATTEMPTS_REQUIRED_=3;
 function prospectActive_(status){return ['PENDING','IN_PROGRESS','OVERDUE'].indexOf(String(status))>=0}
 function prospectContext_(user,affiliateId){requireRole_(user,['STAFF']);affiliateId=String(affiliateId||'');var affiliate=rows_('Affiliates').filter(function(a){return String(a.Affiliate_ID)===affiliateId})[0];if(!affiliate)throw apiError_('NOT_FOUND','Affiliate not found.');var assignment=rows_('Assignments').filter(function(a){return String(a.Affiliate_ID)===affiliateId&&String(a.Staff_ID)===String(user.Staff_ID)&&a.Status==='ACTIVE'})[0];if(!assignment)throw apiError_('FORBIDDEN','This affiliate is not in your current active assignment scope.');var work=rows_('Work_Items').filter(function(w){return String(w.Affiliate_ID)===affiliateId&&String(w.Assignment_ID)===String(assignment.Assignment_ID)&&String(w.Staff_ID)===String(user.Staff_ID)&&prospectActive_(w.Status)}).sort(function(a,b){return replacementTime_(a.Due_At)-replacementTime_(b.Due_At)})[0]||null;return {affiliate:affiliate,assignment:assignment,work:work}}

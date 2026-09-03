@@ -1,6 +1,8 @@
 const assert=require('assert'),fs=require('fs');const source=fs.readFileSync('lib/api-client.ts','utf8');
-assert.match(source,/async read<[^]*REQUEST_TIMEOUT[^]*NETWORK_ERROR[^]*TEMPORARY_UNAVAILABLE/);
-assert.match(source,/await this\.call<T>\(action,payload\)[^]*return this\.call<T>\(action,payload\)/);
+assert.match(source,/private readTimeoutMs = 45_000/);
+assert.match(source,/async read<[^]*this\.readTimeoutMs[^]*NETWORK_ERROR[^]*TEMPORARY_UNAVAILABLE/);
+assert.doesNotMatch(source,/async read<[^\n]*REQUEST_TIMEOUT/);
+assert.match(source,/await this\.call<T>\(action,payload,this\.readTimeoutMs\)[^]*return this\.call<T>\(action,payload,this\.readTimeoutMs\)/);
 assert.match(source,/getPerformanceWorkspace[^\n]*this\.read/);
 assert.match(source,/getIntelligenceWorkspace[^\n]*this\.read/);
 assert.match(source,/saveAffiliatePerformance[^\n]*this\.call/);
