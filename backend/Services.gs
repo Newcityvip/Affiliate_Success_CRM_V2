@@ -83,6 +83,27 @@ function myWork_(user, p) {
     candidates = candidates.filter(function (w) {
       return String(w.Priority) === "HIGH";
     });
+  var query = String(p.search || "")
+    .trim()
+    .toLowerCase();
+  if (query)
+    candidates = candidates.filter(function (w) {
+      var assignment = assignmentById[String(w.Assignment_ID)];
+      if (!assignment || assignment.Status !== "ACTIVE")
+        assignment = activeByAffiliate[String(w.Affiliate_ID)];
+      var affiliate = affiliateById[String(w.Affiliate_ID)] || {},
+        brand = brandById[String(assignment.Brand_ID || affiliate.Brand_ID)] || {};
+      return [
+        affiliate.Affiliate_Username,
+        affiliate.Affiliate_Name,
+        affiliate.Email,
+        affiliate.Phone,
+        brand.Brand_Name,
+        brand.Brand_Code,
+      ].some(function (value) {
+        return String(value || "").toLowerCase().indexOf(query) >= 0;
+      });
+    });
   candidates.sort(function (a, b) {
     var ao = overdue_(a),
       bo = overdue_(b);

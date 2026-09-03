@@ -163,6 +163,25 @@ function myFollowups_(user, p) {
     candidates = candidates.filter(function (x) {
       return x.state.upcoming;
     });
+  var query = String(p.search || "")
+    .trim()
+    .toLowerCase();
+  if (query)
+    candidates = candidates.filter(function (x) {
+      var brand = brandById[
+        String(x.assignment.Brand_ID || x.affiliate.Brand_ID)
+      ] || {};
+      return [
+        x.affiliate.Affiliate_Username,
+        x.affiliate.Affiliate_Name,
+        x.affiliate.Email,
+        x.affiliate.Phone,
+        brand.Brand_Name,
+        brand.Brand_Code,
+      ].some(function (value) {
+        return String(value || "").toLowerCase().indexOf(query) >= 0;
+      });
+    });
   candidates.sort(function (a, b) {
     function group(x) {
       return x.state.overdue

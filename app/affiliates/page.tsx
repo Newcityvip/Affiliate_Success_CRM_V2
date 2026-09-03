@@ -155,8 +155,7 @@ function WorkWorkspaceView({ workId }: { workId: string }) {
     ),
     executable = ["FIRST_CONTACT", "CALLBACK"].includes(
       workspace.work.workType,
-    ),
-    firstContact = workspace.work.workType === "FIRST_CONTACT";
+    );
   return (
     <>
       <div className={styles.top}>
@@ -229,13 +228,11 @@ function WorkWorkspaceView({ workId }: { workId: string }) {
       </div>
       <section className={`card ${styles.outcome}`}>
         <div>
-          <span className={styles.eyebrow}>Execution workflow</span>
-          <h2>
-            {firstContact ? "First Contact" : label_(workspace.work.workType)}
-          </h2>
+          <span className={styles.eyebrow}>Contact workflow</span>
+          <h2>Record Contact Outcome</h2>
           <p className="muted">
-            Record the real call outcome. This action permanently appends
-            operational history.
+            Record the result of this assigned {label_(workspace.work.workType)}
+            {" "}work. The outcome will update the existing work history.
           </p>
         </div>
         {executable && active ? (
@@ -308,7 +305,7 @@ function WorkWorkspaceView({ workId }: { workId: string }) {
               />
             </label>
             <button className="primary" disabled={busy}>
-              {busy ? "Saving…" : "Save Outcome"}
+              {busy ? "Saving…" : "Record Outcome"}
             </button>
           </form>
         ) : (
