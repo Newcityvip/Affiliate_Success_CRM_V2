@@ -164,6 +164,7 @@ function environment({ pool = true } = {}) {
       data.Audit_Log.push({ action, type, id, affiliateId, before, after }),
   };
   vm.createContext(context);
+  vm.runInContext(fs.readFileSync("backend/Followups.gs", "utf8"), context);
   vm.runInContext(fs.readFileSync("backend/Workflow.gs", "utf8"), context);
   vm.runInContext(fs.readFileSync("backend/Replacement.gs", "utf8"), context);
   return { context, data };
@@ -527,6 +528,18 @@ for (const outcome of ["NO_ANSWER", "UNREACHABLE", "WRONG_CONTACT", "OTHER"]) {
   assert.equal(data.Work_Items.length, 1);
   assert.equal(data.Work_Items[0].Status, "COMPLETED");
   assert.equal(data.Interactions.length, 1);
+  const monthly = data.Followups.find((x) => x.Followup_Type === "MONTHLY_ROUTINE_CALL");
+  assert.ok(monthly);
+  assert.equal(monthly.Affiliate_ID, "AFF1");
+  assert.equal(monthly.Assignment_ID, "ASN1");
+  assert.equal(monthly.Staff_ID, "S1");
+  assert.equal(monthly.Source_Interaction_ID, data.Interactions[0].Interaction_ID);
+  assert.equal(monthly.Source_Work_ID, "W1");
+  const connectedAt = new Date(data.Affiliates[0].Telegram_Connected_At), expectedDue = new Date(connectedAt);
+  expectedDue.setUTCDate(1);
+  expectedDue.setUTCMonth(expectedDue.getUTCMonth() + 1);
+  expectedDue.setUTCDate(Math.min(connectedAt.getUTCDate(), new Date(Date.UTC(expectedDue.getUTCFullYear(), expectedDue.getUTCMonth() + 1, 0)).getUTCDate()));
+  assert.equal(monthly.Due_At, expectedDue.toISOString());
 }
 {
   const { context, data } = environment();
@@ -661,6 +674,23 @@ for (const prior of [1, 2]) {
   });
   assert.equal(r.replacement.status, "REPLACED");
   assert.equal(data.Assignments[0].End_Reason, "BAD_AFFILIATE");
+}
+{
+  const { context } = environment();
+  const base = Date.now() - 300 * 3600000;
+  const attempts = [
+    { Result: "OTHER", Attempt_At: new Date(base).toISOString(), Assignment_ID: "ASN1" },
+    { Result: "RECEIVED_BY_UNKNOWN_PERSON", Attempt_At: new Date(base + 10 * 3600000).toISOString(), Assignment_ID: "ASN1" },
+    { Result: "NUMBER_OFF", Attempt_At: new Date(base + 72 * 3600000).toISOString(), Assignment_ID: "ASN1" },
+    { Result: "CONNECTED", Attempt_At: new Date(base + 100 * 3600000).toISOString(), Assignment_ID: "ASN1" },
+    { Result: "CALLBACK_REQUESTED", Attempt_At: new Date(base + 150 * 3600000).toISOString(), Assignment_ID: "ASN1" },
+    { Result: "RECEIVED_BY_UNKNOWN_PERSON", Attempt_At: new Date(base + 192 * 3600000).toISOString(), Assignment_ID: "ASN1" },
+    { Result: "OTHER", Attempt_At: new Date(base + 400 * 3600000).toISOString(), Assignment_ID: "OLD" },
+  ];
+  const qualifying = context.qualifyingAttempts_(attempts.filter((x) => x.Assignment_ID === "ASN1"));
+  assert.deepEqual(Array.from(qualifying, (x) => x.Result), ["OTHER", "NUMBER_OFF", "RECEIVED_BY_UNKNOWN_PERSON"]);
+  for (const outcome of ["NO_ANSWER", "UNREACHABLE", "WRONG_CONTACT", "WRONG_OR_INVALID_CONTACT", "OTHER", "RECEIVED_BY_UNKNOWN_PERSON", "NUMBER_OFF"]) assert.equal(context.REPLACEMENT_FAILURES_[outcome], true);
+  for (const outcome of ["CONNECTED", "CALLBACK_REQUESTED", "BAD_AFFILIATE"]) assert.equal(context.REPLACEMENT_FAILURES_[outcome], undefined);
 }
 for (const outcome of [
   "CONNECTED",

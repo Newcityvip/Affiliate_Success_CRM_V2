@@ -286,6 +286,10 @@ function WorkWorkspaceView({ workId }: { workId: string }) {
                 <option value="WRONG_OR_INVALID_CONTACT">
                   Wrong or Invalid Contact
                 </option>
+                <option value="RECEIVED_BY_UNKNOWN_PERSON">
+                  Received by Unknown Person
+                </option>
+                <option value="NUMBER_OFF">Number Off</option>
                 <option value="OTHER">Other</option>
               </select>
             </label>

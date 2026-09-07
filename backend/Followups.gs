@@ -1,6 +1,56 @@
 function openFollowup_(status) {
   return ["PENDING", "IN_PROGRESS", "OVERDUE"].indexOf(String(status)) >= 0;
 }
+var MONTHLY_ROUTINE_FOLLOWUP_TYPE_ = "MONTHLY_ROUTINE_CALL";
+function nextCalendarMonth_(value) {
+  var date = new Date(value),
+    day = date.getUTCDate(),
+    next = new Date(date.getTime());
+  next.setUTCDate(1);
+  next.setUTCMonth(next.getUTCMonth() + 1);
+  var lastDay = new Date(
+    Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  next.setUTCDate(Math.min(day, lastDay));
+  return next.toISOString();
+}
+function ensureMonthlyRoutineFollowup_(user, context, interactionId, workId, connectedAt) {
+  var affiliateId = String(context.affiliate.Affiliate_ID),
+    assignmentId = String(context.assignment.Assignment_ID),
+    staffId = String(user.Staff_ID),
+    existing = rows_("Followups").filter(function (f) {
+      return (
+        String(f.Affiliate_ID) === affiliateId &&
+        String(f.Assignment_ID) === assignmentId &&
+        String(f.Staff_ID) === staffId &&
+        String(f.Followup_Type) === MONTHLY_ROUTINE_FOLLOWUP_TYPE_ &&
+        openFollowup_(f.Status)
+      );
+    })[0];
+  if (existing) return existing.Followup_ID;
+  var id = reserveIdsUnlocked_("Followup", 1)[0],
+    due = nextCalendarMonth_(connectedAt);
+  appendRows_("Followups", [{
+    Followup_ID: id,
+    Affiliate_ID: affiliateId,
+    Assignment_ID: assignmentId,
+    Staff_ID: staffId,
+    Source_Interaction_ID: interactionId || "",
+    Source_Work_ID: workId || "",
+    Followup_Type: MONTHLY_ROUTINE_FOLLOWUP_TYPE_,
+    Priority: "NORMAL",
+    Status: "PENDING",
+    Due_At: due,
+    Reminder_At: due,
+    Completed_At: "",
+    Outcome: "",
+    Notes: "Routine monthly call after Telegram connection.",
+    Created_At: connectedAt,
+    Updated_At: connectedAt,
+    Created_By: staffId,
+  }]);
+  return id;
+}
 function followupAdmin_(user) {
   return ["ADMIN", "SUPER_ADMIN"].indexOf(user.Role) >= 0;
 }
