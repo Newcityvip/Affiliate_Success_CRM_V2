@@ -87,12 +87,16 @@ function WorkWorkspaceView({ workId }: { workId: string }) {
     if (busy || success || !workspace) return;
     const data = new FormData(event.currentTarget),
       callbackLocal = String(data.get("callbackAt") || ""),
+      nextFollowupLocal = String(data.get("nextFollowupAt") || ""),
       payload = {
         workId,
         outcome,
         telegramStatus: outcome === "CONNECTED" ? telegramStatus : "",
         telegramUsername: String(data.get("telegramUsername") || ""),
         callbackAt: callbackLocal ? new Date(callbackLocal).toISOString() : "",
+        nextFollowupAt: nextFollowupLocal
+          ? new Date(nextFollowupLocal).toISOString()
+          : "",
         notes: String(data.get("notes") || ""),
       };
     setBusy(true);
@@ -314,6 +318,17 @@ function WorkWorkspaceView({ workId }: { workId: string }) {
                       name="telegramUsername"
                       maxLength={100}
                       defaultValue={workspace.affiliate.telegramUsername}
+                    />
+                  </label>
+                )}
+                {telegramStatus === "TELEGRAM_NOT_CONNECTED" && (
+                  <label>
+                    Next Follow-up Date
+                    <input
+                      name="nextFollowupAt"
+                      type="datetime-local"
+                      min={localMin_()}
+                      required
                     />
                   </label>
                 )}
