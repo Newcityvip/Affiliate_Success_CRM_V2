@@ -126,6 +126,8 @@ export class ApiClient {
   requestProspectReplacement(affiliateId:string) { return this.call<ProspectReplacement>('requestProspectReplacement',{affiliateId}).then(result=>{invalidateReadCache('prospect-contact','intelligence','my-work','affiliates','followups','interactions','staff-dashboard','super-admin-dashboard','affiliate');return result}); }
   submitFirstContactOutcome(payload:Record<string,unknown>) { return this.call<FirstContactResult>('submitFirstContactOutcome', payload).then(result=>{invalidateReadCache('intelligence');return result}); }
   submitCallbackOutcome(payload:Record<string,unknown>) { return this.call<FirstContactResult>('submitCallbackOutcome', payload).then(result=>{invalidateReadCache('intelligence');return result}); }
+  submitOngoingFollowup(payload:Record<string,unknown>) { return this.call<FirstContactResult>('submitOngoingFollowup',payload).then(result=>{invalidateReadCache('my-work','followups','affiliates','affiliate','intelligence','staff-dashboard','super-admin-dashboard');return result}); }
+  completeMonthlyRoutineFollowup(payload:Record<string,unknown>) { return this.call<{followupId:string;successorFollowupId:string;affiliateId:string;assignmentId:string;dueAt:string;completedAt:string}>('completeMonthlyRoutineFollowup',payload).then(result=>{invalidateReadCache('followups','affiliates','affiliate','intelligence','staff-dashboard','super-admin-dashboard');return result}); }
   getAffiliate(affiliateId: string) { return this.read<unknown>('getAffiliate', { affiliateId }); }
   invoke<T>(action: string, payload: Record<string, unknown>) { return this.call<T>(action, payload); }
 }

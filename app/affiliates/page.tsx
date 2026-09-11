@@ -59,7 +59,8 @@ function WorkWorkspaceView({ workId }: { workId: string }) {
     [showBadAffiliate, setShowBadAffiliate] = useState(false),
     [badAffiliateNotes, setBadAffiliateNotes] = useState(""),
     [outcome, setOutcome] = useState("CONNECTED"),
-    [telegramStatus, setTelegramStatus] = useState("TELEGRAM_NOT_CONNECTED");
+    [telegramStatus, setTelegramStatus] = useState("TELEGRAM_NOT_CONNECTED"),
+    [ongoingTelegramStatus, setOngoingTelegramStatus] = useState("TELEGRAM_NOT_CONNECTED");
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -143,6 +144,17 @@ function WorkWorkspaceView({ workId }: { workId: string }) {
     } finally {
       setBusy(false);
     }
+  }
+  async function submitOngoing(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy || success || !workspace) return;
+    const data = new FormData(event.currentTarget), local = String(data.get("nextFollowupAt") || "");
+    setBusy(true);setError("");
+    try {
+      setSuccess(await api.submitOngoingFollowup({workId,telegramStatus:ongoingTelegramStatus,nextFollowupAt:local?new Date(local).toISOString():"",notes:String(data.get("notes")||""),staffId:"IGNORED",assignmentId:"IGNORED"}));
+      setWorkspace(null);
+    } catch (cause) { setError(message_(cause)); }
+    finally { setBusy(false); }
   }
   if (loading)
     return (
@@ -276,7 +288,26 @@ function WorkWorkspaceView({ workId }: { workId: string }) {
             {" "}work. The outcome will update the existing work history.
           </p>
         </div>
-        {executable && active ? (
+        {workspace.work.workType === "TELEGRAM_ONBOARDING" && active ? (
+          <form onSubmit={submitOngoing}>
+            <label>
+              Telegram connection status
+              <select value={ongoingTelegramStatus} onChange={(e)=>setOngoingTelegramStatus(e.target.value)}>
+                <option value="TELEGRAM_NOT_CONNECTED">Not connected yet</option>
+                <option value="TELEGRAM_CONNECTED">Connected</option>
+              </select>
+            </label>
+            <label>
+              Next Follow-up Date
+              <input name="nextFollowupAt" type="datetime-local" min={localMin_()} required />
+            </label>
+            <label>
+              Notes
+              <textarea name="notes" maxLength={1000} placeholder="Optional context for this follow-up" />
+            </label>
+            <button className="primary" disabled={busy}>{busy?"Saving…":"Complete & Schedule Next"}</button>
+          </form>
+        ) : executable && active ? (
           <form onSubmit={submit}>
             <label>
               Outcome

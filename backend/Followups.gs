@@ -14,7 +14,7 @@ function nextCalendarMonth_(value) {
   next.setUTCDate(Math.min(day, lastDay));
   return next.toISOString();
 }
-function ensureMonthlyRoutineFollowup_(user, context, interactionId, workId, connectedAt) {
+function ensureMonthlyRoutineFollowup_(user, context, interactionId, workId, connectedAt, dueOverride) {
   var affiliateId = String(context.affiliate.Affiliate_ID),
     assignmentId = String(context.assignment.Assignment_ID),
     staffId = String(user.Staff_ID),
@@ -27,9 +27,16 @@ function ensureMonthlyRoutineFollowup_(user, context, interactionId, workId, con
         openFollowup_(f.Status)
       );
     })[0];
-  if (existing) return existing.Followup_ID;
+  if (existing) {
+    if (dueOverride) updateById_("Followups", "Followup_ID", existing.Followup_ID, {
+      Due_At: dueOverride,
+      Reminder_At: dueOverride,
+      Updated_At: connectedAt,
+    });
+    return existing.Followup_ID;
+  }
   var id = reserveIdsUnlocked_("Followup", 1)[0],
-    due = nextCalendarMonth_(connectedAt);
+    due = dueOverride || nextCalendarMonth_(connectedAt);
   appendRows_("Followups", [{
     Followup_ID: id,
     Affiliate_ID: affiliateId,
@@ -50,6 +57,54 @@ function ensureMonthlyRoutineFollowup_(user, context, interactionId, workId, con
     Created_By: staffId,
   }]);
   return id;
+}
+function completeMonthlyRoutineFollowup_(user, p) {
+  var due = String(p.nextFollowupAt || ""), dueMs = new Date(due).getTime(), notes = String(p.notes || "").trim().slice(0, 1000);
+  if (/^[=+\-@]/.test(notes)) notes = "'" + notes;
+  if (!due || !isFinite(dueMs) || dueMs <= Date.now())
+    throw apiError_("VALIDATION_FAILED", "Choose a future follow-up date and time.");
+  due = new Date(dueMs).toISOString();
+  var lock = LockService.getScriptLock(), result, t = now_();
+  lock.waitLock(30000);
+  try {
+    ["Followups", "Assignments", "Affiliates"].forEach(clearCache_);
+    var followup = rows_("Followups").filter(function (f) {
+        return String(f.Followup_ID) === String(p.followupId);
+      })[0];
+    if (!followup) throw apiError_("NOT_FOUND", "Follow-up not found.");
+    if (String(followup.Staff_ID) !== String(user.Staff_ID))
+      throw apiError_("FORBIDDEN", "Access denied.");
+    if (String(followup.Followup_Type) !== MONTHLY_ROUTINE_FOLLOWUP_TYPE_ || !openFollowup_(followup.Status))
+      throw apiError_("INVALID_STATE", "This routine follow-up is no longer active.");
+    var assignment = rows_("Assignments").filter(function (a) {
+        return String(a.Assignment_ID) === String(followup.Assignment_ID) &&
+          String(a.Affiliate_ID) === String(followup.Affiliate_ID) &&
+          String(a.Staff_ID) === String(user.Staff_ID) && a.Status === "ACTIVE";
+      })[0], affiliate = rows_("Affiliates").filter(function (a) {
+        return String(a.Affiliate_ID) === String(followup.Affiliate_ID);
+      })[0];
+    if (!assignment) throw apiError_("INVALID_STATE", "This follow-up no longer has an active assignment.");
+    if (!affiliate || String(affiliate.Telegram_Status) !== "CONNECTED")
+      throw apiError_("INVALID_STATE", "Telegram must remain connected for a routine follow-up.");
+    var successor = rows_("Followups").filter(function (f) {
+        return String(f.Followup_ID) !== String(followup.Followup_ID) &&
+          String(f.Affiliate_ID) === String(followup.Affiliate_ID) &&
+          String(f.Assignment_ID) === String(followup.Assignment_ID) &&
+          String(f.Staff_ID) === String(user.Staff_ID) &&
+          String(f.Followup_Type) === MONTHLY_ROUTINE_FOLLOWUP_TYPE_ && openFollowup_(f.Status);
+      })[0], successorId;
+    if (successor) {
+      successorId = successor.Followup_ID;
+      updateById_("Followups", "Followup_ID", successorId, {Due_At: due, Reminder_At: due, Updated_At: t});
+    } else {
+      successorId = reserveIdsUnlocked_("Followup", 1)[0];
+      appendRows_("Followups", [{Followup_ID:successorId,Affiliate_ID:followup.Affiliate_ID,Assignment_ID:followup.Assignment_ID,Staff_ID:user.Staff_ID,Source_Interaction_ID:followup.Source_Interaction_ID||"",Source_Work_ID:followup.Source_Work_ID||"",Followup_Type:MONTHLY_ROUTINE_FOLLOWUP_TYPE_,Priority:followup.Priority||"NORMAL",Status:"PENDING",Due_At:due,Reminder_At:due,Completed_At:"",Outcome:"",Notes:"Routine monthly call after Telegram connection.",Created_At:t,Updated_At:t,Created_By:user.Staff_ID}]);
+    }
+    updateById_("Followups", "Followup_ID", followup.Followup_ID, {Status:"COMPLETED",Completed_At:t,Outcome:"ROUTINE_CONTACT_COMPLETED",Notes:notes||followup.Notes||"",Updated_At:t});
+    result = {followupId:followup.Followup_ID,successorFollowupId:successorId,affiliateId:followup.Affiliate_ID,assignmentId:followup.Assignment_ID,dueAt:due,completedAt:t};
+  } finally { lock.releaseLock(); }
+  audit_(user,"MONTHLY_ROUTINE_FOLLOWUP_COMPLETED","Followup",result.followupId,result.affiliateId,null,{Followup_ID:result.followupId,Successor_Followup_ID:result.successorFollowupId,Affiliate_ID:result.affiliateId,Assignment_ID:result.assignmentId,Staff_ID:user.Staff_ID,Next_Followup_At:result.dueAt},{requestId:p.requestId});
+  return result;
 }
 function followupAdmin_(user) {
   return ["ADMIN", "SUPER_ADMIN"].indexOf(user.Role) >= 0;
