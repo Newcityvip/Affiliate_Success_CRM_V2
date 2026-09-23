@@ -11,6 +11,7 @@ import {
   ApiError,
   FirstContactResult,
   ProspectAttemptResult,
+  ProspectReplacement,
   WorkWorkspace,
 } from "../../lib/api-client";
 import { EMAIL_TOOL_URL } from "../../lib/external-tools";
@@ -716,7 +717,10 @@ function AffiliateProfile({ affiliateId }: { affiliateId: string }) {
     [busy, setBusy] = useState(false),
     [showBadAffiliate, setShowBadAffiliate] = useState(false),
     [badAffiliateNotes, setBadAffiliateNotes] = useState(""),
-    [badResult, setBadResult] = useState<ProspectAttemptResult | null>(null);
+    [badResult, setBadResult] = useState<ProspectAttemptResult | null>(null),
+    [showInactiveReplacement, setShowInactiveReplacement] = useState(false),
+    [inactiveNotes, setInactiveNotes] = useState(""),
+    [inactiveResult, setInactiveResult] = useState<ProspectReplacement | null>(null);
   const load = useCallback(async () => {
     setError("");
     try {
@@ -761,6 +765,24 @@ function AffiliateProfile({ affiliateId }: { affiliateId: string }) {
       setBusy(false);
     }
   }
+  async function replaceInactiveAffiliate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy || !inactiveNotes.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api.replaceInactiveAffiliate({
+        affiliateId,
+        notes: inactiveNotes,
+      });
+      setInactiveResult(result);
+      setData(null);
+    } catch (cause) {
+      setError(message_(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
   if (loading)
     return (
       <WorkspaceState
@@ -783,6 +805,30 @@ function AffiliateProfile({ affiliateId }: { affiliateId: string }) {
               <Link
                 className="primary"
                 href={`/affiliates?affiliateId=${encodeURIComponent(badResult.replacement.replacementAffiliateId)}`}
+              >
+                Open Replacement Affiliate
+              </Link>
+            )}
+            <Link href="/affiliates">Back to Affiliates</Link>
+          </>
+        }
+      />
+    );
+  if (inactiveResult)
+    return (
+      <WorkspaceState
+        title={
+          inactiveResult.status === "REPLACED"
+            ? "Inactive affiliate replaced"
+            : "Replacement pending"
+        }
+        detail={inactiveResult.message}
+        action={
+          <>
+            {inactiveResult.replacementAffiliateId && (
+              <Link
+                className="primary"
+                href={`/affiliates?affiliateId=${encodeURIComponent(inactiveResult.replacementAffiliateId)}`}
               >
                 Open Replacement Affiliate
               </Link>
@@ -925,6 +971,71 @@ function AffiliateProfile({ affiliateId }: { affiliateId: string }) {
                   disabled={busy || !badAffiliateNotes.trim()}
                 >
                   {busy ? "Processing…" : "Confirm Bad Affiliate"}
+                </button>
+              </div>
+            </form>
+          )}
+        </section>
+      )}
+      {data.canMarkBadAffiliate && (
+        <section className={`card ${styles.badAffiliate}`}>
+          <div>
+            <span className={styles.eyebrow}>Operational replacement</span>
+            <h2>Replace Inactive Affiliate</h2>
+            <p className="muted">
+              Use when a previously valid affiliate has become inactive or
+              unresponsive.
+            </p>
+          </div>
+          {!showInactiveReplacement ? (
+            <button
+              className={styles.badTrigger}
+              type="button"
+              disabled={busy}
+              onClick={() => setShowInactiveReplacement(true)}
+            >
+              Replace Inactive Affiliate
+            </button>
+          ) : (
+            <form
+              className={styles.badConfirm}
+              onSubmit={replaceInactiveAffiliate}
+            >
+              <p>
+                This affiliate will be removed from your active workload and
+                replaced with another available affiliate from the same brand.
+                Historical records will be preserved.
+              </p>
+              <dl>
+                <Detail label="Affiliate" value={a.affiliateUsername} />
+                <Detail label="Assignment" value={a.assignmentId} />
+              </dl>
+              <label>
+                Reason / Notes
+                <textarea
+                  required
+                  maxLength={1000}
+                  value={inactiveNotes}
+                  onChange={(event) => setInactiveNotes(event.target.value)}
+                  placeholder="Explain why this affiliate is inactive or unresponsive"
+                />
+              </label>
+              <div className={styles.badActions}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    setShowInactiveReplacement(false);
+                    setInactiveNotes("");
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className={styles.badConfirmButton}
+                  disabled={busy || !inactiveNotes.trim()}
+                >
+                  {busy ? "Processing…" : "Replace Affiliate"}
                 </button>
               </div>
             </form>

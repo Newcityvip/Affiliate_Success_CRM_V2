@@ -836,6 +836,65 @@ for (const setup of [
 }
 {
   const { context, data } = environment();
+  data.Affiliates[0].Lifecycle_Status = "TELEGRAM_CONNECTED";
+  data.Affiliates[0].Telegram_Status = "CONNECTED";
+  oldAttempts(data, 1);
+  data.Work_Items.push(
+    { ...data.Work_Items[0], Work_ID: "TG1", Work_Type: "TELEGRAM_ONBOARDING" },
+    { ...data.Work_Items[0], Work_ID: "DONE", Status: "COMPLETED" },
+  );
+  data.Followups.push(
+    { ...data.Followups[0], Followup_ID: "MONTHLY", Followup_Type: "MONTHLY_ROUTINE_CALL" },
+    { ...data.Followups[0], Followup_ID: "HISTORY", Status: "COMPLETED", Outcome: "ROUTINE_CONTACT_COMPLETED" },
+  );
+  const attemptsBefore = data.Contact_Attempts.map((row) => ({ ...row }));
+  const result = context.replaceInactiveAffiliate_(owner, {
+    affiliateId: "AFF1",
+    staffId: "S2",
+    assignmentId: "FAKE",
+    brandId: "B2",
+    replacementAffiliateId: "FAKE",
+    notes: "Previously connected but now unresponsive",
+    requestId: "INACTIVE-1",
+  });
+  assert.equal(result.status, "REPLACED");
+  assert.equal(data.Affiliates.some((row) => row.Affiliate_ID === "AFF1"), true);
+  assert.equal(data.Assignments[0].Status, "ENDED");
+  assert.equal(data.Assignments[0].End_Reason, "INACTIVE_AFTER_CONNECTED");
+  assert.equal(data.Assignments[1].Staff_ID, "S1");
+  assert.equal(data.Assignments[1].Brand_ID, "B1");
+  assert.equal(data.Work_Items.find((row) => row.Work_ID === "W1").Status, "CANCELLED");
+  assert.equal(data.Work_Items.find((row) => row.Work_ID === "TG1").Status, "CANCELLED");
+  assert.equal(data.Work_Items.find((row) => row.Work_ID === "DONE").Status, "COMPLETED");
+  assert.equal(data.Followups.find((row) => row.Followup_ID === "F1").Status, "COMPLETED");
+  assert.equal(data.Followups.find((row) => row.Followup_ID === "MONTHLY").Status, "COMPLETED");
+  assert.equal(data.Followups.find((row) => row.Followup_ID === "HISTORY").Outcome, "ROUTINE_CONTACT_COMPLETED");
+  assert.deepEqual(data.Contact_Attempts, attemptsBefore);
+  assert.equal(context.replacementFailureCount_(data.Contact_Attempts), 1);
+  assert.ok(data.Audit_Log.some((row) => row.action === "INACTIVE_AFFILIATE_REPLACED" && row.after.Reason === "INACTIVE_AFTER_CONNECTED" && row.after.Notes === "Previously connected but now unresponsive"));
+  const counts = { assignments: data.Assignments.length, work: data.Work_Items.length, attempts: data.Contact_Attempts.length, pool: data.Affiliate_Pool.length };
+  assert.throws(() => context.replaceInactiveAffiliate_(owner, { affiliateId: "AFF1", notes: "Replay" }), (error) => error.code === "FORBIDDEN");
+  assert.deepEqual({ assignments: data.Assignments.length, work: data.Work_Items.length, attempts: data.Contact_Attempts.length, pool: data.Affiliate_Pool.length }, counts);
+}
+{
+  const { context, data } = environment({ pool: false });
+  const result = context.replaceInactiveAffiliate_(owner, { affiliateId: "AFF1", notes: "Inactive after connection" });
+  assert.equal(result.status, "PENDING");
+  assert.equal(data.Assignments[0].End_Reason, "INACTIVE_AFTER_CONNECTED");
+  assert.equal(data.Contact_Attempts.length, 0);
+  assert.ok(data.Audit_Log.some((row) => row.action === "PROSPECT_REPLACEMENT_PENDING"));
+}
+{
+  const { context, data } = environment();
+  assert.throws(() => context.replaceInactiveAffiliate_(owner, { affiliateId: "AFF1", notes: "" }), (error) => error.code === "VALIDATION_FAILED");
+  assert.throws(() => context.replaceInactiveAffiliate_(other, { affiliateId: "AFF1", notes: "Not mine" }), (error) => error.code === "FORBIDDEN");
+  data.Assignments[0].Status = "ENDED";
+  assert.throws(() => context.replaceInactiveAffiliate_(owner, { affiliateId: "AFF1", notes: "Stale" }), (error) => error.code === "FORBIDDEN");
+  assert.equal(data.Contact_Attempts.length, 0);
+  assert.equal(data.Assignments.length, 1);
+}
+{
+  const { context, data } = environment();
   assert.throws(
     () =>
       context.recordProspectAttempt_(owner, {
@@ -899,9 +958,15 @@ assert.match(
 assert.match(workspaceCss, /\.contactPrimary:hover/);
 assert.match(workspaceCss, /\.contactPrimary:focus-visible/);
 assert.match(api, /markBadAffiliateFromWork:function\(\)\{return markBadAffiliateFromWork_\(u,p\)\}/);
+assert.match(api, /replaceInactiveAffiliate:function\(\)\{return replaceInactiveAffiliate_\(u,p\)\}/);
 assert.match(client, /markBadAffiliateFromWork\(payload:[^]*this\.call<ProspectAttemptResult>\('markBadAffiliateFromWork',payload\)/);
+assert.match(client, /replaceInactiveAffiliate\(payload:[^]*this\.call<ProspectReplacement>\('replaceInactiveAffiliate',payload\)/);
 assert.match(affiliatePage, /Mark as Bad Affiliate/);
 assert.match(affiliatePage, /Confirm Bad Affiliate/);
+assert.match(affiliatePage, /Replace Inactive Affiliate/);
+assert.match(affiliatePage, /api\.replaceInactiveAffiliate\(\{/);
+assert.match(backend, /'INACTIVE_AFTER_CONNECTED'/);
+assert.ok(!backend.match(/var REPLACEMENT_FAILURES_=\{[^}]*INACTIVE_AFTER_CONNECTED/));
 assert.match(affiliatePage, /workId,\s*affiliateId: workspace\.work\.affiliateId/);
 assert.match(affiliatePage, /submitFirstContactOutcome\(payload\)/);
 assert.ok(!affiliatePage.includes('window.confirm'));
