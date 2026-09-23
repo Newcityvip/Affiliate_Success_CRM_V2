@@ -149,6 +149,7 @@ function environment() {
       isFinite,
       encodeURIComponent,
       apiError_: (code, message) => Object.assign(new Error(message), { code }),
+      config_: () => 24,
       requireRole_: (u, roles) => {
         if (!roles.includes(u.Role)) throw c.apiError_("FORBIDDEN", "Denied");
       },
@@ -182,6 +183,7 @@ function environment() {
     "backend/Issues.gs",
     "backend/Followups.gs",
     "backend/Interactions.gs",
+    "backend/Replacement.gs",
     "backend/Directory.gs",
     "backend/AffiliateSearch.gs",
   ].forEach((file) => vm.runInContext(fs.readFileSync(file, "utf8"), c));

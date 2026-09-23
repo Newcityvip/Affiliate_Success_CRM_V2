@@ -32,7 +32,9 @@
     "test:scale-reads": "node tests/scale-reads.test.js",
     "test:production-polish": "node tests/production-polish.test.js",
     "test:production-readiness-v2": "node tests/production-readiness-v2.test.js",
-    "test:ip-gate": "node tests/ip-gate.test.js"
+    "test:ip-gate": "node tests/ip-gate.test.js",
+    "test:affiliate-controls": "node tests/affiliate-controls.test.js",
+    "test:admin": "node tests/super-admin-creation.test.js"
   },
   "dependencies": {
     "next": "^16.3.3",

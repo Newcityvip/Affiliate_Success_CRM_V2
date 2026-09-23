@@ -138,6 +138,7 @@ const context = {
   isFinite,
   rows_: (name) => data[name] || [],
   apiError_,
+  config_: (key) => key === "ATTEMPT_TWO_WAIT_HOURS" ? 72 : key === "ATTEMPT_THREE_WAIT_HOURS" ? 120 : 24,
   page_: (items, p) => ({
     items: items.slice(0, p.pageSize || 100),
     page: p.page || 1,
@@ -147,6 +148,7 @@ const context = {
 };
 vm.createContext(context);
 vm.runInContext(fs.readFileSync("backend/Services.gs", "utf8"), context);
+vm.runInContext(fs.readFileSync("backend/Replacement.gs", "utf8"), context);
 vm.runInContext(fs.readFileSync("backend/Directory.gs", "utf8"), context);
 const staff = context.affiliateDirectory_(
   { Staff_ID: owner, Role: "STAFF" },

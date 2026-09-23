@@ -486,6 +486,11 @@ function AffiliateDirectory() {
       ? [
           ["Total Affiliates", data.summary.totalAffiliates, "all"],
           ["Telegram Connected", data.summary.telegramConnected, "telegram"],
+          [
+            "Telegram Not Connected",
+            data.summary.telegramNotConnected,
+            "telegram-not-connected",
+          ],
           ["Active Prospects", data.summary.activeProspects, "prospects"],
           ["Active Work", data.summary.activeWork, "work"],
         ]
@@ -603,6 +608,7 @@ function DirectoryResults({ items }: { items: AffiliateDirectoryItem[] }) {
               <th>Contact</th>
               <th>Lifecycle</th>
               <th>Telegram</th>
+              <th>Attempts</th>
               <th>Assigned Staff</th>
               <th>Last Contact</th>
               <th>Work</th>
@@ -629,6 +635,7 @@ function DirectoryResults({ items }: { items: AffiliateDirectoryItem[] }) {
                   <Status value={a.telegramStatus} />
                   <CopyValue label="Telegram" value={a.telegramUsername} />
                 </td>
+                <td>{a.qualifyingAttemptCount}/3</td>
                 <td>{a.assignedStaffName || "Unassigned"}</td>
                 <td>{date_(a.lastContactAt)}</td>
                 <td>
@@ -675,6 +682,7 @@ function DirectoryResults({ items }: { items: AffiliateDirectoryItem[] }) {
               {a.brandName || a.brandCode || "No brand"} ·{" "}
               {a.assignedStaffName || "Unassigned"}
             </p>
+            <p>Qualifying attempts: {a.qualifyingAttemptCount}/3</p>
             <CopyValue label="Email" value={a.email} />
             <CopyValue label="Phone" value={a.phone} />
             <div className={styles.rowActions}>
@@ -704,7 +712,11 @@ function AffiliateProfile({ affiliateId }: { affiliateId: string }) {
     [initial] = useState(() => readCache<AffiliateDetailResponse>(cacheKey)),
     [data, setData] = useState<AffiliateDetailResponse | null>(initial),
     [loading, setLoading] = useState(!initial),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false),
+    [showBadAffiliate, setShowBadAffiliate] = useState(false),
+    [badAffiliateNotes, setBadAffiliateNotes] = useState(""),
+    [badResult, setBadResult] = useState<ProspectAttemptResult | null>(null);
   const load = useCallback(async () => {
     setError("");
     try {
@@ -729,6 +741,26 @@ function AffiliateProfile({ affiliateId }: { affiliateId: string }) {
   useEffect(() => {
     void load();
   }, [load]);
+  async function markBadAffiliate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy || !badAffiliateNotes.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api.recordProspectContactAttempt({
+        affiliateId,
+        channel: "CALL",
+        outcome: "BAD_AFFILIATE",
+        notes: badAffiliateNotes,
+      });
+      setBadResult(result);
+      setData(null);
+    } catch (cause) {
+      setError(message_(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
   if (loading)
     return (
       <WorkspaceState
@@ -736,7 +768,31 @@ function AffiliateProfile({ affiliateId }: { affiliateId: string }) {
         detail="Retrieving profile and recent activity."
       />
     );
-  if (error || !data)
+  if (badResult?.replacement)
+    return (
+      <WorkspaceState
+        title={
+          badResult.replacement.status === "REPLACED"
+            ? "Replacement allocated"
+            : "Replacement pending"
+        }
+        detail={badResult.replacement.message}
+        action={
+          <>
+            {badResult.replacement.replacementAffiliateId && (
+              <Link
+                className="primary"
+                href={`/affiliates?affiliateId=${encodeURIComponent(badResult.replacement.replacementAffiliateId)}`}
+              >
+                Open Replacement Affiliate
+              </Link>
+            )}
+            <Link href="/affiliates">Back to Affiliates</Link>
+          </>
+        }
+      />
+    );
+  if (!data)
     return (
       <WorkspaceState
         title="Affiliate unavailable"
@@ -775,6 +831,7 @@ function AffiliateProfile({ affiliateId }: { affiliateId: string }) {
             ))}
         </div>
       </header>
+      {error && <p className="error-message">{error}</p>}
       <div className={styles.columns}>
         <section className="card">
           <h2>Contact information</h2>
@@ -813,6 +870,67 @@ function AffiliateProfile({ affiliateId }: { affiliateId: string }) {
         </section>
       </div>
       <PerformanceCompact data={data} />
+      {data.canMarkBadAffiliate && (
+        <section className={`card ${styles.badAffiliate}`}>
+          <div>
+            <span className={styles.eyebrow}>Assignment exception</span>
+            <h2>Bad Affiliate</h2>
+            <p className="muted">
+              Use only when this affiliate is confirmed invalid.
+            </p>
+          </div>
+          {!showBadAffiliate ? (
+            <button
+              className={styles.badTrigger}
+              type="button"
+              disabled={busy}
+              onClick={() => setShowBadAffiliate(true)}
+            >
+              Mark as Bad Affiliate
+            </button>
+          ) : (
+            <form className={styles.badConfirm} onSubmit={markBadAffiliate}>
+              <p>
+                This action will end the current assignment, cancel its active
+                work, and immediately attempt a same-brand replacement. If none
+                is available, replacement will remain pending.
+              </p>
+              <dl>
+                <Detail label="Affiliate" value={a.affiliateUsername} />
+                <Detail label="Assignment" value={a.assignmentId} />
+              </dl>
+              <label>
+                Reason
+                <textarea
+                  required
+                  maxLength={1000}
+                  value={badAffiliateNotes}
+                  onChange={(event) => setBadAffiliateNotes(event.target.value)}
+                  placeholder="Explain why this affiliate is invalid"
+                />
+              </label>
+              <div className={styles.badActions}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    setShowBadAffiliate(false);
+                    setBadAffiliateNotes("");
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className={styles.badConfirmButton}
+                  disabled={busy || !badAffiliateNotes.trim()}
+                >
+                  {busy ? "Processing…" : "Confirm Bad Affiliate"}
+                </button>
+              </div>
+            </form>
+          )}
+        </section>
+      )}
       <Activity events={data.recentActivity} />
     </>
   );

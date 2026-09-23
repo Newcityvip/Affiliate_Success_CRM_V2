@@ -10,7 +10,8 @@ function directoryMaps_() {
       brands = {},
       activeAssignments = {},
       assignmentLists = {},
-      workByAffiliate = {};
+      workByAffiliate = {},
+      attemptsByAssignment = {};
     rows_("Staff_List").forEach(function (s) {
       staff[String(s.Staff_ID)] = s;
     });
@@ -28,12 +29,22 @@ function directoryMaps_() {
       var key = String(w.Affiliate_ID);
       (workByAffiliate[key] || (workByAffiliate[key] = [])).push(w);
     });
+    rows_("Contact_Attempts").forEach(function (a) {
+      var key = String(a.Assignment_ID);
+      (attemptsByAssignment[key] || (attemptsByAssignment[key] = [])).push(a);
+    });
+    Object.keys(attemptsByAssignment).forEach(function (key) {
+      attemptsByAssignment[key].sort(function (a, b) {
+        return replacementTime_(a.Attempt_At) - replacementTime_(b.Attempt_At);
+      });
+    });
     return {
       staff: staff,
       brands: brands,
       assignments: activeAssignments,
       assignmentLists: assignmentLists,
       work: workByAffiliate,
+      attempts: attemptsByAssignment,
     };
   };
   return typeof requestMemo_ === "function"
@@ -84,6 +95,11 @@ function directoryRow_(affiliate, maps, scopeStaffId) {
     assignedStaffId: assignment.Staff_ID || "",
     assignedStaffName: staff.Display_Name || staff.Username || "",
     assignmentId: assignment.Assignment_ID || "",
+    qualifyingAttemptCount: assignment.Assignment_ID
+      ? qualifyingAttempts_(
+          maps.attempts[String(assignment.Assignment_ID)] || [],
+        ).length
+      : 0,
     lastContactAt: affiliate.Last_Contact_At || "",
     lastMeaningfulContactAt: affiliate.Last_Meaningful_Contact_At || "",
     activeWorkCount: work.length,
@@ -109,6 +125,7 @@ function affiliateDirectory_(user, p) {
     summary = {
       totalAffiliates: candidates.length,
       telegramConnected: 0,
+      telegramNotConnected: 0,
       activeProspects: 0,
       activeWork: 0,
     };
@@ -135,6 +152,7 @@ function affiliateDirectory_(user, p) {
       a.Lifecycle_Status === "TELEGRAM_CONNECTED"
     )
       summary.telegramConnected++;
+    if (a.Telegram_Status !== "CONNECTED") summary.telegramNotConnected++;
     if (
       ["NEW", "ACTIVE"].indexOf(String(a.Prospect_Status)) >= 0 &&
       a.Archive_Status !== "ARCHIVED"
@@ -151,6 +169,11 @@ function affiliateDirectory_(user, p) {
       filter === "telegram" &&
       a.Telegram_Status !== "CONNECTED" &&
       a.Lifecycle_Status !== "TELEGRAM_CONNECTED"
+    )
+      return false;
+    if (
+      filter === "telegram-not-connected" &&
+      a.Telegram_Status === "CONNECTED"
     )
       return false;
     if (
@@ -381,6 +404,10 @@ function affiliateDetail_(user, p) {
       access.assignment &&
       String(access.assignment.Staff_ID) === String(user.Staff_ID) &&
       !conflict,
+    canMarkBadAffiliate:
+      user.Role === "STAFF" &&
+      access.assignment &&
+      String(access.assignment.Staff_ID) === String(user.Staff_ID),
   };
 }
 function workWorkspaceBootstrap_(user, p) {
